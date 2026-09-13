@@ -28,4 +28,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Ledger-macOS
-          path: dist/Ledger.app
+          path: dist/JobHuntAI.app
