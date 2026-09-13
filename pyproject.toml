@@ -1,0 +1,5 @@
+[project]
+name = "Ledger"
+
+[tool.pyside6-project]
+files = ["main.py", "Main.qml", "SettingsField.qml", "digest_engine.py", "config.py", "send_report.py"]

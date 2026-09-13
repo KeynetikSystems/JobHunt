@@ -1,0 +1,11 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.qtcreator/
+build/
+dist/
+*.spec
+reports/
+seen_items.json
+queries.json
