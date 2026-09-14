@@ -192,21 +192,24 @@ class DigestBackend(QObject):
     @Slot(str, str, str, str, str, str, str, str, str, str)
     def saveSettings(self, recipient_email, smtp_host, smtp_port, smtp_user, smtp_pass,
                       tavily_key, groq_key, groq_model, job_queries_text, news_queries_text):
-        save_env({
-            "DIGEST_TO_EMAIL": recipient_email,
-            "SMTP_HOST": smtp_host,
-            "SMTP_PORT": smtp_port,
-            "SMTP_USER": smtp_user,
-            "SMTP_PASS": smtp_pass,
-            "TAVILY_API_KEY": tavily_key,
-            "GROQ_API_KEY": groq_key,
-            "GROQ_MODEL": groq_model,
-        })
-        job_queries = [q.strip() for q in job_queries_text.split("\n") if q.strip()]
-        news_queries = [q.strip() for q in news_queries_text.split("\n") if q.strip()]
-        digest_engine.save_queries(job_queries, news_queries)
-        self.loadSettings()
-        self._set_status("Settings saved.")
+        try:
+            save_env({
+                "DIGEST_TO_EMAIL": recipient_email,
+                "SMTP_HOST": smtp_host,
+                "SMTP_PORT": smtp_port,
+                "SMTP_USER": smtp_user,
+                "SMTP_PASS": smtp_pass,
+                "TAVILY_API_KEY": tavily_key,
+                "GROQ_API_KEY": groq_key,
+                "GROQ_MODEL": groq_model,
+            })
+            job_queries = [q.strip() for q in job_queries_text.split("\n") if q.strip()]
+            news_queries = [q.strip() for q in news_queries_text.split("\n") if q.strip()]
+            digest_engine.save_queries(job_queries, news_queries)
+            self.loadSettings()
+            self._set_status("Settings saved.")
+        except Exception as e:
+            self._set_status(f"Save failed: {e}")
 
 
 def main():

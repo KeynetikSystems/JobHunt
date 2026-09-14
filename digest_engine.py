@@ -334,7 +334,7 @@ def send_failure_alert(error_msg: str) -> None:
         pass
 
 
-def _collect_jobs_and_news(env: dict, seen: dict, log) -> tuple[list, list]:
+def collect_jobs_and_news(env: dict, seen: dict, log) -> tuple[list, list]:
     tavily_key = env.get("TAVILY_API_KEY")
     groq_key = env.get("GROQ_API_KEY")
     groq_model = env.get("GROQ_MODEL") or DEFAULT_GROQ_MODEL
@@ -360,11 +360,12 @@ def _collect_jobs_and_news(env: dict, seen: dict, log) -> tuple[list, list]:
     return jobs, news
 
 
-def finalize_and_send(jobs: list, news: list, log=print) -> Path:
-    """Emails already-collected jobs/news and marks their URLs seen. Used both by run_digest's
-    own non-dry-run path and by the GUI's separate "Email me this" action on a cached scan."""
+def finalize_and_send(jobs: list, news: list, log=print, to_addr: str | None = None) -> Path:
+    """Emails already-collected jobs/news and marks their URLs seen. Used by run_digest's own
+    non-dry-run path, the GUI's separate "Email me this" action, and the backend (which passes
+    a specific user's address instead of relying on the single DIGEST_TO_EMAIL in .env)."""
     env = load_env()
-    to_addr = env.get("DIGEST_TO_EMAIL")
+    to_addr = to_addr or env.get("DIGEST_TO_EMAIL")
     if not to_addr:
         raise RuntimeError("Missing DIGEST_TO_EMAIL in .env")
 
@@ -405,7 +406,7 @@ def run_digest(log=print, dry_run: bool = False) -> tuple[Path, bool, list, list
         raise RuntimeError("Missing DIGEST_TO_EMAIL in .env")
 
     seen = load_seen()
-    jobs, news = _collect_jobs_and_news(env, seen, log)
+    jobs, news = collect_jobs_and_news(env, seen, log)
 
     if dry_run:
         html = build_html(jobs, news)

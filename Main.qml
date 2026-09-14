@@ -46,35 +46,51 @@ ApplicationWindow {
                 }
 
                 ColumnLayout {
-                    spacing: 14
-                    Text {
+                    spacing: 6
+                    Button {
+                        id: dashboardNavBtn
                         text: "Dashboard"
-                        color: root.currentPage === "dashboard" ? brass : slate
-                        font.pixelSize: 14
+                        flat: true
+                        hoverEnabled: true
+                        Layout.fillWidth: true
                         ToolTip.text: "View today's scan results"
-                        ToolTip.visible: dashboardNavArea.containsMouse
+                        ToolTip.visible: hovered
                         ToolTip.delay: 400
-                        MouseArea {
-                            id: dashboardNavArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.currentPage = "dashboard"
+                        onClicked: root.currentPage = "dashboard"
+                        padding: 8
+                        background: Rectangle {
+                            color: brass
+                            opacity: root.currentPage === "dashboard" ? 0.15 : 0
+                            radius: 4
+                        }
+                        contentItem: Text {
+                            text: dashboardNavBtn.text
+                            color: root.currentPage === "dashboard" ? brass : slate
+                            font.pixelSize: 14
+                            verticalAlignment: Text.AlignVCenter
                         }
                     }
-                    Text {
+                    Button {
+                        id: settingsNavBtn
                         text: "Settings"
-                        color: root.currentPage === "settings" ? brass : slate
-                        font.pixelSize: 14
+                        flat: true
+                        hoverEnabled: true
+                        Layout.fillWidth: true
                         ToolTip.text: "Configure email delivery, API keys, and search queries"
-                        ToolTip.visible: settingsNavArea.containsMouse
+                        ToolTip.visible: hovered
                         ToolTip.delay: 400
-                        MouseArea {
-                            id: settingsNavArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.currentPage = "settings"
+                        onClicked: root.currentPage = "settings"
+                        padding: 8
+                        background: Rectangle {
+                            color: brass
+                            opacity: root.currentPage === "settings" ? 0.15 : 0
+                            radius: 4
+                        }
+                        contentItem: Text {
+                            text: settingsNavBtn.text
+                            color: root.currentPage === "settings" ? brass : slate
+                            font.pixelSize: 14
+                            verticalAlignment: Text.AlignVCenter
                         }
                     }
                 }
@@ -151,7 +167,11 @@ ApplicationWindow {
                         text: "Email me this"
                         enabled: !backend.busy && (backend.jobs.length > 0 || backend.news.length > 0)
                         hoverEnabled: true
-                        ToolTip.text: "Email the results shown below and mark them as seen, so they won't appear again"
+                        ToolTip.text: backend.busy
+                            ? "Working…"
+                            : (backend.jobs.length > 0 || backend.news.length > 0)
+                                ? "Email the results shown below and mark them as seen, so they won't appear again"
+                                : "Run a scan first — there's nothing to email yet"
                         ToolTip.visible: hovered
                         ToolTip.delay: 400
                         onClicked: backend.sendEmail()
@@ -173,30 +193,38 @@ ApplicationWindow {
                 }
 
                 // status line
-                Text {
-                    text: backend.status
-                    color: brass
-                    font.pixelSize: 12
+                RowLayout {
                     Layout.fillWidth: true
+                    spacing: 8
+
+                    BusyIndicator {
+                        running: backend.busy
+                        visible: backend.busy
+                        implicitWidth: 18
+                        implicitHeight: 18
+                    }
+                    Text {
+                        text: backend.status
+                        color: brass
+                        font.pixelSize: 12
+                        Layout.fillWidth: true
+                    }
                 }
 
                 // scrollable ledger feed
                 ScrollView {
+                    id: dashboardScroll
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     clip: true
 
                     ColumnLayout {
-                        x: 0
-                        y: 0
-                        width: 720
-                        height: 114
+                        width: dashboardScroll.availableWidth - 60
                         spacing: 24
 
                         // -- opportunities section -----------------------------
                         ColumnLayout {
-
-                            width:parent.width
+                            Layout.fillWidth: true
                             spacing: 10
 
                             Text {
@@ -223,6 +251,8 @@ ApplicationWindow {
                                         id: jobCardArea
                                         anchors.fill: parent
                                         hoverEnabled: true
+                                        cursorShape: (modelData.url || "").length > 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                        onClicked: if (modelData.url) Qt.openUrlExternally(modelData.url)
                                     }
 
                                     Rectangle {
@@ -302,6 +332,8 @@ ApplicationWindow {
                                         id: newsCardArea
                                         anchors.fill: parent
                                         hoverEnabled: true
+                                        cursorShape: (modelData.url || "").length > 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                        onClicked: if (modelData.url) Qt.openUrlExternally(modelData.url)
                                     }
 
                                     Rectangle {
@@ -370,17 +402,14 @@ ApplicationWindow {
                 }
 
                 ScrollView {
+                    id: settingsScroll
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     clip: true
 
                     ColumnLayout {
-                        id:settingsColumn
-                        x: 0
-                        y: 6
-
-                        width: 441
-                        height: 560
+                        id: settingsColumn
+                        width: settingsScroll.availableWidth - 60
                         spacing: 28
 
                         ColumnLayout {
@@ -504,41 +533,42 @@ ApplicationWindow {
                                 }
                             }
                         }
+                    }
+                }
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 16
+                // pinned footer — always visible, no scrolling needed to save
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 16
 
-                            Button {
-                                text: "Save settings"
-                                hoverEnabled: true
-                                ToolTip.text: "Writes these values to .env and queries.json"
-                                ToolTip.visible: hovered
-                                ToolTip.delay: 400
-                                onClicked: backend.saveSettings(
-                                    recipientField.text, smtpHostField.text, smtpPortField.text,
-                                    smtpUserField.text, smtpPassField.text,
-                                    tavilyField.text, groqField.text, groqModelField.text,
-                                    jobQueriesArea.text, newsQueriesArea.text
-                                )
-                                background: Rectangle { color: brass; radius: 2 }
-                                contentItem: Text {
-                                    text: parent.text
-                                    color: "#14181F"
-                                    font.pixelSize: 13
-                                    font.bold: true
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                                padding: 10
-                            }
-
-                            Text {
-                                text: backend.status
-                                color: brass
-                                font.pixelSize: 12
-                            }
+                    Button {
+                        text: "Save settings"
+                        hoverEnabled: true
+                        ToolTip.text: "Writes these values to .env and queries.json"
+                        ToolTip.visible: hovered
+                        ToolTip.delay: 400
+                        onClicked: backend.saveSettings(
+                            recipientField.text, smtpHostField.text, smtpPortField.text,
+                            smtpUserField.text, smtpPassField.text,
+                            tavilyField.text, groqField.text, groqModelField.text,
+                            jobQueriesArea.text, newsQueriesArea.text
+                        )
+                        background: Rectangle { color: brass; radius: 2 }
+                        contentItem: Text {
+                            text: parent.text
+                            color: "#14181F"
+                            font.pixelSize: 13
+                            font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
                         }
+                        padding: 10
+                    }
+
+                    Text {
+                        text: backend.status
+                        color: brass
+                        font.pixelSize: 12
                     }
                 }
             }

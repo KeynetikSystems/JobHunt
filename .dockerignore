@@ -1,0 +1,15 @@
+.git/
+.venv/
+backend/.venv/
+mobile_app/
+.qtcreator/
+build/
+dist/
+__pycache__/
+*.pyc
+.env
+*.db
+reports/
+seen_items.json
+queries.json
+.claude/
