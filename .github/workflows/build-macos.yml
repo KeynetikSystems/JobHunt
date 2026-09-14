@@ -5,13 +5,22 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest   # arm64 (Apple Silicon)
+            arch: arm64
+          - os: macos-13       # x86_64 (Intel)
+            arch: x86_64
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
 
       - name: Install dependencies
         run: |
@@ -20,12 +29,24 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          pyinstaller --name Ledger --windowed --noconfirm \
+          pyinstaller --name JobHuntAI --windowed --noconfirm \
             --add-data "Main.qml:." \
             --add-data "SettingsField.qml:." \
             main.py
 
+      - name: Verify binary architecture
+        run: |
+          ACTUAL=$(lipo -info dist/Ledger.app/Contents/MacOS/Ledger | awk -F': ' '{print $NF}' | xargs)
+          echo "Expected: ${{ matrix.arch }} — Actual: $ACTUAL"
+          if [ "$ACTUAL" != "${{ matrix.arch }}" ]; then
+            echo "::error::Architecture mismatch — expected ${{ matrix.arch }}, got $ACTUAL"
+            exit 1
+          fi
+
+      - name: Package app
+        run: ditto -c -k --sequesterRsrc --keepParent dist/Ledger.app Ledger-macOS-${{ matrix.arch }}.zip
+
       - uses: actions/upload-artifact@v4
         with:
-          name: Ledger-macOS
-          path: dist/JobHuntAI.app
+          name: Ledger-macOS-${{ matrix.arch }}
+          path: Ledger-macOS-${{ matrix.arch }}.zip
