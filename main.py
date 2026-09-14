@@ -214,7 +214,7 @@ class DigestBackend(QObject):
 
 def main():
     app = QGuiApplication(sys.argv)
-    app.setApplicationName("Ledger")
+    app.setApplicationName("JobHuntAI")
 
     engine = QQmlApplicationEngine()
     backend = DigestBackend()

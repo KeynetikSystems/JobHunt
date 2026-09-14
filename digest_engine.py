@@ -1,7 +1,7 @@
 """Core pipeline: search (Tavily) -> summarize (Groq) -> dedupe -> email.
 
 Standalone — no Claude Code / Anthropic API involved. Used by both the
-Ledger desktop GUI (main.py) and headless runs (Windows Task Scheduler calls
+JobHuntAI desktop GUI (main.py) and headless runs (Windows Task Scheduler calls
 this file directly: `python digest_engine.py`).
 
 All HTTP calls use only the standard library, so nothing needs `pip install`.

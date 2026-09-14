@@ -9,7 +9,7 @@ ApplicationWindow {
     height: 680
     minimumWidth: 760
     minimumHeight: 520
-    title: "Ledger — PE / VC / Impact / Consulting"
+    title: "JobHuntAI"
     color: "#14181F"
 
     // -- palette --------------------------------------------------------
