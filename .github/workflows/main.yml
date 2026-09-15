@@ -2,11 +2,11 @@ name: Daily Opportunity Digest
 
 on:
   schedule:
-    - cron: "0 7 * * *"   # 07:00 UTC every Monday
+    - cron: "0 7 * * *"   # 07:00 UTC every day
   workflow_dispatch:        # lets you trigger it manually from the Actions tab
 
 permissions:
-  contents: write   # CHANGED from read — needed to push docs/ archive updates back to the repo
+  contents: write   # required to push docs/ archive updates back to the repo
 
 concurrency:
   group: weekly-digest
@@ -26,7 +26,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -r requirements-desktop.txt
+        run: pip install -r requirements.txt
 
       - name: Restore deduplication state
         id: cache-seen-items
@@ -53,14 +53,10 @@ jobs:
           path: seen_items.json
           key: seen-items-${{ github.run_id }}
 
-      # ADDED — copies today's reports/digest-*.html into docs/ and
-      # regenerates docs/index.html as a newest-first archive list.
       - name: Update digest archive
         if: success()
         run: python build_archive.py
 
-      # ADDED — commits the docs/ archive back to the repo so GitHub Pages
-      # serves the update. No-ops cleanly if there's nothing new to commit.
       - name: Commit archive
         if: success()
         run: |
