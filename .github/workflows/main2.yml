@@ -37,13 +37,15 @@ jobs:
           restore-keys: |
             seen-items-
 
-      - name: Run digest
+      - name: Run digest (archive only, no email)
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
-          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
-          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          DIGEST_TO_EMAIL: ${{ secrets.DIGEST_TO_EMAIL }}
+          # SKIP_EMAIL tells digest_engine.py to still write the dated report and update
+          # seen_items.json, but skip the SMTP send. Email delivery is kept as a desktop-app-only
+          # feature. Remove this line (and re-add the GMAIL_*/DIGEST_TO_EMAIL secrets) to bring
+          # workflow email back.
+          SKIP_EMAIL: "true"
         run: python digest_engine.py
 
       - name: Save deduplication state

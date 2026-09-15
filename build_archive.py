@@ -52,9 +52,19 @@ def _copy_new_reports() -> None:
         shutil.copy2(src, dest)
 
 
+def _ensure_nojekyll() -> None:
+    """GitHub Pages runs every site through Jekyll by default, which can fail
+    on plain static HTML (e.g. trying to convert a nonexistent stylesheet).
+    An empty .nojekyll file tells Pages to serve docs/ as-is."""
+    nojekyll = DOCS_DIR / ".nojekyll"
+    if not nojekyll.exists():
+        nojekyll.touch()
+
+
 def build_index() -> Path:
     _copy_new_reports()
     DOCS_DIR.mkdir(exist_ok=True)
+    _ensure_nojekyll()
 
     entries = []
     for path in DOCS_DIR.glob("digest-*.html"):
