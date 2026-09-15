@@ -38,7 +38,7 @@ ApplicationWindow {
                 spacing: 28
 
                 Text {
-                    text: "LEDGER"
+                    text: "JobHuntAI"
                     color: parchment
                     font.family: "Georgia"
                     font.pixelSize: 20
@@ -457,12 +457,12 @@ ApplicationWindow {
                             }
 
                             SettingsField {
-                                label: "Tavily API key"; text: backend.tavilyKey; id: tavilyField; masked: true
-                                tooltip: "From app.tavily.com — used to search the web for listings and news"
+                                label: "T-key"; text: backend.tavilyKey; id: tavilyField; masked: true
+                                // tooltip: "From app.tavily.com — used to search the web for listings and news"
                             }
                             SettingsField {
-                                label: "Groq API key"; text: backend.groqKey; id: groqField; masked: true
-                                tooltip: "From console.groq.com — used to summarize search results"
+                                label: "G-key"; text: backend.groqKey; id: groqField; masked: true
+                                // tooltip: "From console.groq.com — used to summarize search results"
                             }
                             SettingsField {
                                 label: "Groq model"; text: backend.groqModel; id: groqModelField
