@@ -360,23 +360,31 @@ def collect_jobs_and_news(env: dict, seen: dict, log) -> tuple[list, list]:
     return jobs, news
 
 
-def finalize_and_send(jobs: list, news: list, log=print, to_addr: str | None = None) -> Path:
-    """Emails already-collected jobs/news and marks their URLs seen. Used by run_digest's own
+def finalize_and_send(jobs: list, news: list, log=print, to_addr: str | None = None,
+                       skip_email: bool = False) -> Path:
+    """Writes the dated report and marks jobs/news URLs seen. Used by run_digest's own
     non-dry-run path, the GUI's separate "Email me this" action, and the backend (which passes
-    a specific user's address instead of relying on the single DIGEST_TO_EMAIL in .env)."""
-    env = load_env()
-    to_addr = to_addr or env.get("DIGEST_TO_EMAIL")
-    if not to_addr:
-        raise RuntimeError("Missing DIGEST_TO_EMAIL in .env")
+    a specific user's address instead of relying on the single DIGEST_TO_EMAIL in .env).
 
+    skip_email=True still writes the real report file and updates seen_items.json (so the
+    archive/dedup state advances normally) but skips the SMTP send — used by the GitHub Actions
+    workflow when only the archive is wanted, not the email. Defaults to False so existing
+    desktop-app call sites are unaffected."""
     html = build_html(jobs, news)
     REPORTS_DIR.mkdir(exist_ok=True)
     html_path = REPORTS_DIR / f"digest-{date.today().isoformat()}.html"
     html_path.write_text(html, encoding="utf-8")
 
-    log(f"Sending email to {to_addr}...")
-    send_report(f"Daily Opportunity & PE/VC Digest - {date.today().isoformat()}", html_path, to_addr)
-    log("Sent.")
+    if skip_email:
+        log("Skipping email send (skip_email=True) — report saved and seen store will still update.")
+    else:
+        env = load_env()
+        to_addr = to_addr or env.get("DIGEST_TO_EMAIL")
+        if not to_addr:
+            raise RuntimeError("Missing DIGEST_TO_EMAIL in .env")
+        log(f"Sending email to {to_addr}...")
+        send_report(f"Daily Opportunity & PE/VC Digest - {date.today().isoformat()}", html_path, to_addr)
+        log("Sent.")
 
     seen = load_seen()
     for item in jobs:
@@ -389,11 +397,17 @@ def finalize_and_send(jobs: list, news: list, log=print, to_addr: str | None = N
     return html_path
 
 
-def run_digest(log=print, dry_run: bool = False) -> tuple[Path, bool, list, list]:
+def run_digest(log=print, dry_run: bool = False, skip_email: bool = False) -> tuple[Path, bool, list, list]:
     """Runs the full pipeline once. Returns (html_path, sent, jobs, news).
 
-    dry_run=True skips sending the email and skips updating the seen store,
+    dry_run=True skips sending the email AND skips updating the seen store,
     so it's safe to use for previewing without affecting the next real run.
+
+    skip_email=True (and dry_run=False) still writes the real dated report and updates
+    seen_items.json — only the SMTP send is skipped. Use this when you want the archive/dedup
+    state to advance normally (e.g. for a GitHub Pages archive) without sending mail. Ignored
+    if dry_run=True, since dry runs never send email anyway. Defaults to False, so existing
+    call sites (desktop app, headless __main__) keep emailing exactly as before.
     """
     env = load_env()
     tavily_key = env.get("TAVILY_API_KEY")
@@ -402,7 +416,7 @@ def run_digest(log=print, dry_run: bool = False) -> tuple[Path, bool, list, list
 
     if not tavily_key or not groq_key:
         raise RuntimeError("Missing TAVILY_API_KEY or GROQ_API_KEY in .env")
-    if not dry_run and not to_addr:
+    if not dry_run and not skip_email and not to_addr:
         raise RuntimeError("Missing DIGEST_TO_EMAIL in .env")
 
     seen = load_seen()
@@ -418,20 +432,27 @@ def run_digest(log=print, dry_run: bool = False) -> tuple[Path, bool, list, list
         return html_path, False, jobs, news
 
     if not jobs and not news:
-        log("Nothing new this week — email still sent (says so explicitly) rather than skipped silently.")
+        log("Nothing new this week." + ("" if skip_email else " Email still sent (says so explicitly) rather than skipped silently."))
 
-    html_path = finalize_and_send(jobs, news, log=log)
+    html_path = finalize_and_send(jobs, news, log=log, skip_email=skip_email)
     log(f"Saved digest to {html_path}")
-    return html_path, True, jobs, news
+    return html_path, not skip_email, jobs, news
 
 
 if __name__ == "__main__":
+    import os
+
     def _log(msg):
         print(f"[{datetime.now().isoformat(timespec='seconds')}] {msg}")
 
+    # Set SKIP_EMAIL=true in the environment (e.g. a GitHub Actions workflow) to run the full
+    # pipeline and update seen_items.json / write the dated report, without sending an email.
+    # Unset or any other value keeps the original always-emails behavior.
+    skip_email = os.environ.get("SKIP_EMAIL", "").strip().lower() in ("1", "true", "yes")
+
     try:
-        _log("Starting headless run...")
-        run_digest(log=_log)
+        _log("Starting headless run..." + (" (email disabled)" if skip_email else ""))
+        run_digest(log=_log, skip_email=skip_email)
     except Exception as e:
         _log(f"FAILED: {e}")
         send_failure_alert(str(e))
