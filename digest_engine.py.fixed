@@ -13,10 +13,6 @@ import urllib.request
 import urllib.error
 import ssl
 import certifi
-
-# SSL context for secure HTTPS connections
-ssl_context = ssl.create_default_context(cafile=certifi.where())
-
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 from html import escape

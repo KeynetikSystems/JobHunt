@@ -1,0 +1,13 @@
+# ADD THESE IMPORTS AFTER YOUR EXISTING IMPORTS (around line 12-13):
+import ssl
+import certifi
+
+# ADD THIS RIGHT AFTER THE IMPORTS TO CREATE SSL CONTEXT:
+# SSL context for secure HTTPS connections
+ssl_context = ssl.create_default_context(cafile=certifi.where())
+
+# THEN MODIFY THE _http_post_json FUNCTION:
+# FIND THIS LINE (around line 137):
+#            with urllib.request.urlopen(req, timeout=60) as resp:
+# CHANGE IT TO:
+#            with urllib.request.urlopen(req, timeout=60, context=ssl_context) as resp:

@@ -16,7 +16,7 @@ import certifi
 
 # SSL context for secure HTTPS connections
 ssl_context = ssl.create_default_context(cafile=certifi.where())
-
+import certifi
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 from html import escape
