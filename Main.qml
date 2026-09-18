@@ -290,6 +290,10 @@ ApplicationWindow {
                                             wrapMode: Text.WordWrap
                                             Layout.fillWidth: true
                                         }
+
+                                        ApplicationMaterialsPanel {
+                                            url: modelData.url || ""
+                                        }
                                     }
                                 }
                             }
@@ -533,6 +537,49 @@ ApplicationWindow {
                                 }
                             }
                         }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+
+                            Text {
+                                text: "Your background / CV"
+                                color: parchment
+                                font.family: "Georgia"
+                                font.pixelSize: 16
+                            }
+                            Text {
+                                text: "Paste your CV or a summary of your experience — used to draft tailored CV highlights and cover letters for opportunities you choose to apply to."
+                                color: slate
+                                font.pixelSize: 12
+                                wrapMode: Text.WordWrap
+                                Layout.fillWidth: true
+                            }
+                            ScrollView {
+                                id: cvScroll
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 220
+                                clip: true
+                                TextArea {
+                                    id: cvArea
+                                    width: cvScroll.availableWidth
+                                    text: backend.cvText
+                                    color: parchment
+                                    font.family: "Courier"
+                                    font.pixelSize: 12
+                                    wrapMode: Text.WordWrap
+                                    hoverEnabled: true
+                                    ToolTip.text: "Never sent anywhere except Groq, alongside the specific role you ask to draft for"
+                                    ToolTip.visible: hovered
+                                    ToolTip.delay: 400
+                                    background: Rectangle {
+                                        color: inkPanel
+                                        border.color: hairline
+                                        border.width: 1
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -551,7 +598,7 @@ ApplicationWindow {
                             recipientField.text, smtpHostField.text, smtpPortField.text,
                             smtpUserField.text, smtpPassField.text,
                             tavilyField.text, groqField.text, groqModelField.text,
-                            jobQueriesArea.text, newsQueriesArea.text
+                            jobQueriesArea.text, newsQueriesArea.text, cvArea.text
                         )
                         background: Rectangle { color: brass; radius: 2 }
                         contentItem: Text {

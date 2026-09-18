@@ -28,6 +28,7 @@ from send_report import send_report
 SEEN_FILE = ROOT / "seen_items.json"
 REPORTS_DIR = ROOT / "reports"
 QUERIES_FILE = ROOT / "queries.json"
+CV_FILE = ROOT / "cv.txt"
 
 TAVILY_URL = "https://api.tavily.com/search"
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
@@ -128,6 +129,51 @@ If nothing qualifies, respond with: {{"items": []}}
 """
 
 
+APPLICATION_MATERIALS_PROMPT = """You are helping a job seeker tailor their application to one \
+specific role. Use ONLY the real background below — do not invent employers, titles, dates, \
+or achievements that aren't in it.
+
+Their background:
+{cv_text}
+
+The role they're applying to:
+Title: {title}
+Firm: {firm}
+Details: {note}
+
+Produce two things:
+1. cv_highlights: 4-6 bullet points (one per line, no bullet characters, joined with \\n), drawn \
+only from their real background above, reordered and reworded to foreground whatever is most \
+relevant to this specific role.
+2. cover_letter: a complete, ready-to-send cover letter (3-4 short paragraphs, first person, \
+professional, not generic or robotic) that references specific details from both their \
+background and this role.
+
+Respond with ONLY a JSON object in this exact shape, nothing else:
+{{"cv_highlights": "...", "cover_letter": "..."}}
+"""
+
+
+def generate_application_materials(item: dict, cv_text: str, groq_key: str, groq_model: str) -> dict:
+    """Tailored CV highlights + a cover letter draft for one job, grounded in the user's own
+    pasted background (never invented). Reuses groq_complete's JSON-mode plumbing."""
+    if not cv_text.strip():
+        raise RuntimeError("Add your CV/background in Settings first.")
+    prompt = APPLICATION_MATERIALS_PROMPT.format(
+        cv_text=cv_text[:4000],
+        title=item.get("title", ""),
+        firm=item.get("firm", ""),
+        note=item.get("note", ""),
+    )
+    result = groq_complete(prompt, groq_key, groq_model)
+    if not result.get("cover_letter"):
+        raise RuntimeError(result.get("_parse_error") or "Groq didn't return usable application materials.")
+    return {
+        "cv_highlights": result.get("cv_highlights", ""),
+        "cover_letter": result.get("cover_letter", ""),
+    }
+
+
 def _extract_retry_after(body: str) -> float | None:
     """Groq's 429 body includes 'Please try again in 6.17s' — use their number instead of guessing."""
     match = re.search(r"try again in ([\d.]+)s", body)
@@ -223,6 +269,18 @@ def save_queries(job_queries: list, news_queries: list) -> None:
         json.dumps({"job_queries": job_queries, "news_queries": news_queries}, indent=2),
         encoding="utf-8",
     )
+
+
+def load_cv() -> str:
+    """The user's own background/experience, pasted once in Settings and reused as the
+    source material for generate_application_materials() — never invented, only reworded."""
+    if CV_FILE.exists():
+        return CV_FILE.read_text(encoding="utf-8")
+    return ""
+
+
+def save_cv(text: str) -> None:
+    CV_FILE.write_text(text, encoding="utf-8")
 
 
 def gather_and_filter(queries: list, api_key: str, seen: dict, topic: str, days: int | None,
