@@ -3,6 +3,7 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'ad_config.dart';
 import 'api_client.dart';
 import 'screens/dashboard_screen.dart';
+import 'screens/history_screen.dart';
 import 'screens/settings_screen.dart';
 import 'theme.dart';
 
@@ -38,6 +39,7 @@ class RootShell extends StatefulWidget {
 class _RootShellState extends State<RootShell> {
   int _index = 0;
   final _dashboardKey = GlobalKey<DashboardScreenState>();
+  final _historyKey = GlobalKey<HistoryScreenState>();
   bool _loadedConnection = false;
 
   @override
@@ -58,8 +60,12 @@ class _RootShellState extends State<RootShell> {
         index: _index,
         children: [
           DashboardScreen(key: _dashboardKey),
+          HistoryScreen(key: _historyKey),
           SettingsScreen(
-            onConnectionChanged: () => _dashboardKey.currentState?.onConnectionChanged(),
+            onConnectionChanged: () {
+              _dashboardKey.currentState?.onConnectionChanged();
+              _historyKey.currentState?.onConnectionChanged();
+            },
           ),
         ],
       ),
@@ -72,6 +78,7 @@ class _RootShellState extends State<RootShell> {
         type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), label: 'Dashboard'),
+          BottomNavigationBarItem(icon: Icon(Icons.history), label: 'History'),
           BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), label: 'Settings'),
         ],
       ),

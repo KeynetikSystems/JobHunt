@@ -59,10 +59,20 @@ class DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  Future<void> _dismiss(String url, VoidCallback removeLocally) async {
-    setState(removeLocally);
+  Future<void> _dismissJob(JobListing job) async {
+    setState(() => _jobs.remove(job));
     try {
-      await ApiClient.instance.dismiss([url]);
+      await ApiClient.instance.dismiss(jobs: [job]);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _status = "Dismiss didn't save ($e) — it may reappear next scan.");
+    }
+  }
+
+  Future<void> _dismissNews(NewsItem item) async {
+    setState(() => _news.remove(item));
+    try {
+      await ApiClient.instance.dismiss(news: [item]);
     } catch (e) {
       if (!mounted) return;
       setState(() => _status = "Dismiss didn't save ($e) — it may reappear next scan.");
@@ -86,7 +96,7 @@ class DashboardScreenState extends State<DashboardScreen> {
           key: ValueKey(job.url),
           direction: DismissDirection.endToStart,
           background: _dismissBackground(),
-          onDismissed: (_) => _dismiss(job.url, () => _jobs.remove(job)),
+          onDismissed: (_) => _dismissJob(job),
           child: JobCard(job: job),
         ),
       );
@@ -99,7 +109,7 @@ class DashboardScreenState extends State<DashboardScreen> {
           key: ValueKey(item.url),
           direction: DismissDirection.endToStart,
           background: _dismissBackground(),
-          onDismissed: (_) => _dismiss(item.url, () => _news.remove(item)),
+          onDismissed: (_) => _dismissNews(item),
           child: NewsCard(news: item),
         ),
       );

@@ -25,10 +25,32 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS seen_items (
     user_id INTEGER NOT NULL REFERENCES users(id),
     url TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'job',
+    title TEXT,
+    firm TEXT,
+    seniority TEXT,
+    note TEXT,
+    headline TEXT,
+    source TEXT,
+    summary TEXT,
     seen_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (user_id, url)
 );
 """
+
+# Columns added after the initial release. CREATE TABLE IF NOT EXISTS above only
+# covers fresh databases, so existing ones (like a deployed backend.db) need these
+# added by hand — this keeps the history feature working without a manual migration.
+_SEEN_ITEMS_MIGRATIONS = [
+    ("kind", "TEXT NOT NULL DEFAULT 'job'"),
+    ("title", "TEXT"),
+    ("firm", "TEXT"),
+    ("seniority", "TEXT"),
+    ("note", "TEXT"),
+    ("headline", "TEXT"),
+    ("source", "TEXT"),
+    ("summary", "TEXT"),
+]
 
 
 @contextmanager
@@ -46,3 +68,7 @@ def get_db():
 def init_db() -> None:
     with get_db() as conn:
         conn.executescript(SCHEMA)
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(seen_items)")}
+        for name, coltype in _SEEN_ITEMS_MIGRATIONS:
+            if name not in existing:
+                conn.execute(f"ALTER TABLE seen_items ADD COLUMN {name} {coltype}")

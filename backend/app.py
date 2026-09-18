@@ -95,17 +95,59 @@ class SendRequest(BaseModel):
 
 
 class DismissRequest(BaseModel):
-    urls: list[str]
+    jobs: list = []
+    news: list = []
 
 
-def _mark_seen(user_id: int, urls: list[str]) -> None:
+class HistoryItem(BaseModel):
+    kind: str
+    url: str
+    title: str | None = None
+    firm: str | None = None
+    seniority: str | None = None
+    note: str | None = None
+    headline: str | None = None
+    source: str | None = None
+    summary: str | None = None
+    seen_at: str
+
+
+class HistoryResponse(BaseModel):
+    items: list[HistoryItem]
+
+
+def _mark_seen(user_id: int, jobs: list, news: list) -> None:
+    """Records jobs/news as seen for this user, keeping their details so /api/history
+    can show what was previously surfaced, not just that a URL was dismissed."""
     with db.get_db() as conn:
-        for url in urls:
-            if url:
-                conn.execute(
-                    "INSERT OR IGNORE INTO seen_items (user_id, url) VALUES (?, ?)",
-                    (user_id, url),
-                )
+        for j in jobs:
+            url = j.get("url")
+            if not url:
+                continue
+            conn.execute(
+                """
+                INSERT INTO seen_items (user_id, url, kind, title, firm, seniority, note)
+                VALUES (?, ?, 'job', ?, ?, ?, ?)
+                ON CONFLICT (user_id, url) DO UPDATE SET
+                    seen_at = datetime('now'), kind = 'job', title = excluded.title,
+                    firm = excluded.firm, seniority = excluded.seniority, note = excluded.note
+                """,
+                (user_id, url, j.get("title", ""), j.get("firm", ""), j.get("seniority", ""), j.get("note", "")),
+            )
+        for n in news:
+            url = n.get("url")
+            if not url:
+                continue
+            conn.execute(
+                """
+                INSERT INTO seen_items (user_id, url, kind, headline, source, summary)
+                VALUES (?, ?, 'news', ?, ?, ?)
+                ON CONFLICT (user_id, url) DO UPDATE SET
+                    seen_at = datetime('now'), kind = 'news', headline = excluded.headline,
+                    source = excluded.source, summary = excluded.summary
+                """,
+                (user_id, url, n.get("headline", ""), n.get("source", ""), n.get("summary", "")),
+            )
 
 
 # -- routes -------------------------------------------------------------------
@@ -143,13 +185,25 @@ def send(body: SendRequest, user: dict = Depends(auth.require_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    _mark_seen(user["id"], [item.get("url") for item in [*body.jobs, *body.news]])
+    _mark_seen(user["id"], body.jobs, body.news)
     return {"status": "sent"}
 
 
 @app.post("/api/dismiss")
 def dismiss(body: DismissRequest, user: dict = Depends(auth.require_user)):
-    """Marks URLs seen without emailing — the in-app equivalent of /api/send's seen-marking,
+    """Marks items seen without emailing — the in-app equivalent of /api/send's seen-marking,
     for clients (mobile) that show results directly instead of delivering them by email."""
-    _mark_seen(user["id"], body.urls)
-    return {"status": "dismissed", "count": len(body.urls)}
+    _mark_seen(user["id"], body.jobs, body.news)
+    return {"status": "dismissed", "count": len(body.jobs) + len(body.news)}
+
+
+@app.get("/api/history", response_model=HistoryResponse)
+def history(user: dict = Depends(auth.require_user)):
+    """Everything this user has previously seen (sent or dismissed), newest first —
+    backs the mobile app's History tab."""
+    with db.get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM seen_items WHERE user_id = ? ORDER BY seen_at DESC LIMIT 200",
+            (user["id"],),
+        ).fetchall()
+    return HistoryResponse(items=[HistoryItem(**dict(row)) for row in rows])

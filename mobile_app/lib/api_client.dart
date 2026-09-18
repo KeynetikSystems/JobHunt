@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'models/history_item.dart';
 import 'models/job_listing.dart';
 import 'models/news_item.dart';
 
@@ -84,6 +85,7 @@ class ApiClient {
         .map((j) => JobListing(
               title: j['title'] ?? '',
               firm: j['firm'] ?? '',
+              seniority: j['seniority'] ?? 'Unspecified',
               note: j['note'] ?? '',
               url: j['url'] ?? '',
             ))
@@ -99,17 +101,47 @@ class ApiClient {
     return ScanResult(jobs, news);
   }
 
-  Future<void> dismiss(List<String> urls) async {
+  Future<void> dismiss({List<JobListing> jobs = const [], List<NewsItem> news = const []}) async {
     _requireConnected();
-    if (urls.isEmpty) return;
+    if (jobs.isEmpty && news.isEmpty) return;
     final res = await http.post(
       Uri.parse('$baseUrl/api/dismiss'),
       headers: _authHeaders,
-      body: jsonEncode({'urls': urls}),
+      body: jsonEncode({
+        'jobs': jobs
+            .map((j) => {
+                  'title': j.title,
+                  'firm': j.firm,
+                  'seniority': j.seniority,
+                  'note': j.note,
+                  'url': j.url,
+                })
+            .toList(),
+        'news': news
+            .map((n) => {
+                  'headline': n.headline,
+                  'source': n.source,
+                  'summary': n.summary,
+                  'url': n.url,
+                })
+            .toList(),
+      }),
     );
     if (res.statusCode != 200) {
       throw Exception('Dismiss failed (${res.statusCode}): ${res.body}');
     }
+  }
+
+  Future<List<HistoryItem>> history() async {
+    _requireConnected();
+    final res = await http.get(Uri.parse('$baseUrl/api/history'), headers: _authHeaders);
+    if (res.statusCode != 200) {
+      throw Exception('History failed (${res.statusCode}): ${res.body}');
+    }
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    return (data['items'] as List)
+        .map((i) => HistoryItem.fromJson(i as Map<String, dynamic>))
+        .toList();
   }
 
   void _requireConnected() {

@@ -38,7 +38,7 @@ class JobCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        job.firm,
+                        '${job.firm}  ·  ${job.seniority}',
                         style: const TextStyle(
                           color: LedgerColors.brass,
                           fontSize: 11,
