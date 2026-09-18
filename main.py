@@ -33,11 +33,15 @@ class DigestBackend(QObject):
     dateLabelChanged = Signal()
     busyChanged = Signal()
     settingsChanged = Signal()
+    historyChanged = Signal()
+    materialsChanged = Signal()
 
     def __init__(self):
         super().__init__()
         self._jobs = []
         self._news = []
+        self._history = []
+        self._materials = {}
         self._status = "Ready."
         self._date_label = "No scan run yet"
         self._busy = False
@@ -51,7 +55,9 @@ class DigestBackend(QObject):
         self._groq_model = ""
         self._job_queries_text = ""
         self._news_queries_text = ""
+        self._cv_text = ""
         self.loadSettings()
+        self.loadHistory()
 
     # -- Qt properties exposed to QML -------------------------------------
 
@@ -62,6 +68,14 @@ class DigestBackend(QObject):
     @Property("QVariantList", notify=newsChanged)
     def news(self):
         return self._news
+
+    @Property("QVariantList", notify=historyChanged)
+    def history(self):
+        return self._history
+
+    @Property("QVariantMap", notify=materialsChanged)
+    def materials(self):
+        return self._materials
 
     @Property(str, notify=statusChanged)
     def status(self):
@@ -115,6 +129,10 @@ class DigestBackend(QObject):
     def newsQueriesText(self):
         return self._news_queries_text
 
+    @Property(str, notify=settingsChanged)
+    def cvText(self):
+        return self._cv_text
+
     # -- internal helpers ---------------------------------------------------
 
     def _set_status(self, text: str):
@@ -124,6 +142,12 @@ class DigestBackend(QObject):
     def _set_busy(self, value: bool):
         self._busy = value
         self.busyChanged.emit()
+
+    def _find_job(self, url: str):
+        for item in (*self._jobs, *self._history):
+            if item.get("url") == url and item.get("kind", "job") == "job":
+                return item
+        return None
 
     # -- actions callable from QML ------------------------------------------
 
@@ -145,6 +169,7 @@ class DigestBackend(QObject):
                 self.jobsChanged.emit()
                 self.newsChanged.emit()
                 self.dateLabelChanged.emit()
+                self.loadHistory()
                 self._set_status(
                     f"Found {len(self._jobs)} new roles and {len(self._news)} news items."
                 )
@@ -166,12 +191,44 @@ class DigestBackend(QObject):
             try:
                 digest_engine.finalize_and_send(self._jobs, self._news, log=self._set_status)
                 self._set_status("Digest emailed.")
+                self.loadHistory()
             except Exception as e:
                 self._set_status(f"Email failed: {e}")
             finally:
                 self._set_busy(False)
 
         threading.Thread(target=worker, daemon=True).start()
+
+    @Slot(str)
+    def draftApplicationMaterials(self, url):
+        if self._busy:
+            return
+        job = self._find_job(url)
+        if job is None:
+            self._set_status("Couldn't find that listing anymore.")
+            return
+        self._set_busy(True)
+        self._set_status(f"Drafting CV highlights and cover letter for {job.get('title', 'this role')}…")
+
+        def worker():
+            try:
+                materials = digest_engine.generate_application_materials(
+                    job, self._cv_text, self._groq_key, self._groq_model
+                )
+                self._materials = {**self._materials, url: materials}
+                self.materialsChanged.emit()
+                self._set_status("Application materials ready.")
+            except Exception as e:
+                self._set_status(f"Drafting failed: {e}")
+            finally:
+                self._set_busy(False)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    @Slot()
+    def loadHistory(self):
+        self._history = digest_engine.load_history()
+        self.historyChanged.emit()
 
     @Slot()
     def loadSettings(self):
@@ -187,11 +244,12 @@ class DigestBackend(QObject):
         job_queries, news_queries = digest_engine.load_queries()
         self._job_queries_text = "\n".join(job_queries)
         self._news_queries_text = "\n".join(news_queries)
+        self._cv_text = digest_engine.load_cv()
         self.settingsChanged.emit()
 
-    @Slot(str, str, str, str, str, str, str, str, str, str)
+    @Slot(str, str, str, str, str, str, str, str, str, str, str)
     def saveSettings(self, recipient_email, smtp_host, smtp_port, smtp_user, smtp_pass,
-                      tavily_key, groq_key, groq_model, job_queries_text, news_queries_text):
+                      tavily_key, groq_key, groq_model, job_queries_text, news_queries_text, cv_text):
         try:
             save_env({
                 "DIGEST_TO_EMAIL": recipient_email,
@@ -206,6 +264,7 @@ class DigestBackend(QObject):
             job_queries = [q.strip() for q in job_queries_text.split("\n") if q.strip()]
             news_queries = [q.strip() for q in news_queries_text.split("\n") if q.strip()]
             digest_engine.save_queries(job_queries, news_queries)
+            digest_engine.save_cv(cv_text)
             self.loadSettings()
             self._set_status("Settings saved.")
         except Exception as e:

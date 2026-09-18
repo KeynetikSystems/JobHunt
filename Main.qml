@@ -71,6 +71,29 @@ ApplicationWindow {
                         }
                     }
                     Button {
+                        id: historyNavBtn
+                        text: "History"
+                        flat: true
+                        hoverEnabled: true
+                        Layout.fillWidth: true
+                        ToolTip.text: "Browse past opportunities and news you've already seen"
+                        ToolTip.visible: hovered
+                        ToolTip.delay: 400
+                        onClicked: root.currentPage = "history"
+                        padding: 8
+                        background: Rectangle {
+                            color: brass
+                            opacity: root.currentPage === "history" ? 0.15 : 0
+                            radius: 4
+                        }
+                        contentItem: Text {
+                            text: historyNavBtn.text
+                            color: root.currentPage === "history" ? brass : slate
+                            font.pixelSize: 14
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                    Button {
                         id: settingsNavBtn
                         text: "Settings"
                         flat: true
@@ -290,6 +313,10 @@ ApplicationWindow {
                                             wrapMode: Text.WordWrap
                                             Layout.fillWidth: true
                                         }
+
+                                        ApplicationMaterialsPanel {
+                                            url: modelData.url || ""
+                                        }
                                     }
                                 }
                             }
@@ -382,6 +409,75 @@ ApplicationWindow {
                                 font.italic: true
                                 font.pixelSize: 12
                             }
+                        }
+                    }
+                }
+            }
+
+            // -- history page ---------------------------------------------------
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 32
+                spacing: 20
+                visible: root.currentPage === "history"
+
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    Text {
+                        text: "History"
+                        color: parchment
+                        font.family: "Georgia"
+                        font.pixelSize: 26
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    Text {
+                        text: backend.history.length + " item" + (backend.history.length === 1 ? "" : "s")
+                        color: slate
+                        font.pixelSize: 12
+                    }
+                }
+
+                Text {
+                    text: "Every opportunity and news item ever found by a scan, whether or not it's been emailed — newest first."
+                    color: slate
+                    font.pixelSize: 13
+                }
+
+                ScrollView {
+                    id: historyScroll
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+
+                    ColumnLayout {
+                        width: historyScroll.availableWidth - 60
+                        spacing: 10
+
+                        Repeater {
+                            model: backend.history
+                            delegate: HistoryCard {
+                                Layout.fillWidth: true
+                                kind: modelData.kind || "job"
+                                title: (modelData.kind === "news" ? modelData.headline : modelData.title) || ""
+                                subtitle: modelData.kind === "news"
+                                    ? (modelData.source || "")
+                                    : ((modelData.firm || "") + (modelData.seniority ? "  ·  " + modelData.seniority : ""))
+                                note: (modelData.kind === "news" ? modelData.summary : modelData.note) || ""
+                                url: modelData.url || ""
+                                seenAt: modelData.seen_at || ""
+                                status: modelData.status || "found"
+                            }
+                        }
+
+                        Text {
+                            visible: backend.history.length === 0
+                            text: "Nothing here yet. Run a scan to start building history."
+                            color: slate
+                            font.italic: true
+                            font.pixelSize: 12
                         }
                     }
                 }
@@ -533,6 +629,49 @@ ApplicationWindow {
                                 }
                             }
                         }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+
+                            Text {
+                                text: "Your background / CV"
+                                color: parchment
+                                font.family: "Georgia"
+                                font.pixelSize: 16
+                            }
+                            Text {
+                                text: "Paste your CV or a summary of your experience — used to draft tailored CV highlights and cover letters for opportunities you choose to apply to."
+                                color: slate
+                                font.pixelSize: 12
+                                wrapMode: Text.WordWrap
+                                Layout.fillWidth: true
+                            }
+                            ScrollView {
+                                id: cvScroll
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 220
+                                clip: true
+                                TextArea {
+                                    id: cvArea
+                                    width: cvScroll.availableWidth
+                                    text: backend.cvText
+                                    color: parchment
+                                    font.family: "Courier"
+                                    font.pixelSize: 12
+                                    wrapMode: Text.WordWrap
+                                    hoverEnabled: true
+                                    ToolTip.text: "Never sent anywhere except Groq, alongside the specific role you ask to draft for"
+                                    ToolTip.visible: hovered
+                                    ToolTip.delay: 400
+                                    background: Rectangle {
+                                        color: inkPanel
+                                        border.color: hairline
+                                        border.width: 1
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -551,7 +690,7 @@ ApplicationWindow {
                             recipientField.text, smtpHostField.text, smtpPortField.text,
                             smtpUserField.text, smtpPassField.text,
                             tavilyField.text, groqField.text, groqModelField.text,
-                            jobQueriesArea.text, newsQueriesArea.text
+                            jobQueriesArea.text, newsQueriesArea.text, cvArea.text
                         )
                         background: Rectangle { color: brass; radius: 2 }
                         contentItem: Text {

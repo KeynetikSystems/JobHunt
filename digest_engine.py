@@ -26,8 +26,10 @@ from config import ROOT, load_env
 from send_report import send_report
 
 SEEN_FILE = ROOT / "seen_items.json"
+HISTORY_FILE = ROOT / "history.json"
 REPORTS_DIR = ROOT / "reports"
 QUERIES_FILE = ROOT / "queries.json"
+CV_FILE = ROOT / "cv.txt"
 
 TAVILY_URL = "https://api.tavily.com/search"
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
@@ -128,6 +130,51 @@ If nothing qualifies, respond with: {{"items": []}}
 """
 
 
+APPLICATION_MATERIALS_PROMPT = """You are helping a job seeker tailor their application to one \
+specific role. Use ONLY the real background below — do not invent employers, titles, dates, \
+or achievements that aren't in it.
+
+Their background:
+{cv_text}
+
+The role they're applying to:
+Title: {title}
+Firm: {firm}
+Details: {note}
+
+Produce two things:
+1. cv_highlights: 4-6 bullet points (one per line, no bullet characters, joined with \\n), drawn \
+only from their real background above, reordered and reworded to foreground whatever is most \
+relevant to this specific role.
+2. cover_letter: a complete, ready-to-send cover letter (3-4 short paragraphs, first person, \
+professional, not generic or robotic) that references specific details from both their \
+background and this role.
+
+Respond with ONLY a JSON object in this exact shape, nothing else:
+{{"cv_highlights": "...", "cover_letter": "..."}}
+"""
+
+
+def generate_application_materials(item: dict, cv_text: str, groq_key: str, groq_model: str) -> dict:
+    """Tailored CV highlights + a cover letter draft for one job, grounded in the user's own
+    pasted background (never invented). Reuses groq_complete's JSON-mode plumbing."""
+    if not cv_text.strip():
+        raise RuntimeError("Add your CV/background in Settings first.")
+    prompt = APPLICATION_MATERIALS_PROMPT.format(
+        cv_text=cv_text[:4000],
+        title=item.get("title", ""),
+        firm=item.get("firm", ""),
+        note=item.get("note", ""),
+    )
+    result = groq_complete(prompt, groq_key, groq_model)
+    if not result.get("cover_letter"):
+        raise RuntimeError(result.get("_parse_error") or "Groq didn't return usable application materials.")
+    return {
+        "cv_highlights": result.get("cv_highlights", ""),
+        "cover_letter": result.get("cover_letter", ""),
+    }
+
+
 def _extract_retry_after(body: str) -> float | None:
     """Groq's 429 body includes 'Please try again in 6.17s' — use their number instead of guessing."""
     match = re.search(r"try again in ([\d.]+)s", body)
@@ -209,6 +256,35 @@ def save_seen(seen: dict) -> None:
     SEEN_FILE.write_text(json.dumps(seen, indent=2), encoding="utf-8")
 
 
+def load_history() -> list:
+    """Full details (title, firm, note, etc.) for every job/news item ever marked seen —
+    backs the desktop app's History page. seen_items.json only keeps url->date, which
+    isn't enough to show what an old item actually was. Newest first."""
+    if not HISTORY_FILE.exists():
+        return []
+    data = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+    return sorted(data.values(), key=lambda item: item.get("seen_at", ""), reverse=True)
+
+
+def record_history(jobs: list, news: list, status: str = "found") -> None:
+    """Keyed by url, so re-recording an item merges into its existing entry instead of
+    duplicating it: the original seen_at (first-found date) is preserved, and status only
+    ever moves found -> emailed, never back. Called from run_digest's dry-run scan
+    (status="found", so a plain scan shows up in History even if never emailed) and from
+    finalize_and_send once something is actually emailed (status="emailed")."""
+    data = json.loads(HISTORY_FILE.read_text(encoding="utf-8")) if HISTORY_FILE.exists() else {}
+    today = date.today().isoformat()
+    for kind, items in (("job", jobs), ("news", news)):
+        for item in items:
+            url = item.get("url")
+            if not url:
+                continue
+            existing = data.get(url, {})
+            resolved_status = "emailed" if existing.get("status") == "emailed" else status
+            data[url] = {**item, "kind": kind, "seen_at": existing.get("seen_at", today), "status": resolved_status}
+    HISTORY_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
 def load_queries() -> tuple[list, list]:
     """Reads queries.json if present (edited via the GUI's Queries tab), else the built-in defaults."""
     if QUERIES_FILE.exists():
@@ -223,6 +299,18 @@ def save_queries(job_queries: list, news_queries: list) -> None:
         json.dumps({"job_queries": job_queries, "news_queries": news_queries}, indent=2),
         encoding="utf-8",
     )
+
+
+def load_cv() -> str:
+    """The user's own background/experience, pasted once in Settings and reused as the
+    source material for generate_application_materials() — never invented, only reworded."""
+    if CV_FILE.exists():
+        return CV_FILE.read_text(encoding="utf-8")
+    return ""
+
+
+def save_cv(text: str) -> None:
+    CV_FILE.write_text(text, encoding="utf-8")
 
 
 def gather_and_filter(queries: list, api_key: str, seen: dict, topic: str, days: int | None,
@@ -405,6 +493,7 @@ def finalize_and_send(jobs: list, news: list, log=print, to_addr: str | None = N
         if item.get("url"):
             seen[item["url"]] = date.today().isoformat()
     save_seen(seen)
+    record_history(jobs, news, status="emailed")
     return html_path
 
 
@@ -438,6 +527,7 @@ def run_digest(log=print, dry_run: bool = False, skip_email: bool = False) -> tu
         REPORTS_DIR.mkdir(exist_ok=True)
         html_path = REPORTS_DIR / f"digest-{date.today().isoformat()}-preview.html"
         html_path.write_text(html, encoding="utf-8")
+        record_history(jobs, news, status="found")
         log(f"Saved digest to {html_path}")
         log("Preview only — not sending email or updating the seen store.")
         return html_path, False, jobs, news
