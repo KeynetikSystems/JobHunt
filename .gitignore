@@ -9,5 +9,6 @@ dist/
 reports/
 seen_items.json
 queries.json
+history.json
 *.db
 .claude/

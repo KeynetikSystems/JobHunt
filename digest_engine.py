@@ -26,6 +26,7 @@ from config import ROOT, load_env
 from send_report import send_report
 
 SEEN_FILE = ROOT / "seen_items.json"
+HISTORY_FILE = ROOT / "history.json"
 REPORTS_DIR = ROOT / "reports"
 QUERIES_FILE = ROOT / "queries.json"
 
@@ -207,6 +208,35 @@ def load_seen() -> dict:
 
 def save_seen(seen: dict) -> None:
     SEEN_FILE.write_text(json.dumps(seen, indent=2), encoding="utf-8")
+
+
+def load_history() -> list:
+    """Full details (title, firm, note, etc.) for every job/news item ever marked seen —
+    backs the desktop app's History page. seen_items.json only keeps url->date, which
+    isn't enough to show what an old item actually was. Newest first."""
+    if not HISTORY_FILE.exists():
+        return []
+    data = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+    return sorted(data.values(), key=lambda item: item.get("seen_at", ""), reverse=True)
+
+
+def record_history(jobs: list, news: list, status: str = "found") -> None:
+    """Keyed by url, so re-recording an item merges into its existing entry instead of
+    duplicating it: the original seen_at (first-found date) is preserved, and status only
+    ever moves found -> emailed, never back. Called from run_digest's dry-run scan
+    (status="found", so a plain scan shows up in History even if never emailed) and from
+    finalize_and_send once something is actually emailed (status="emailed")."""
+    data = json.loads(HISTORY_FILE.read_text(encoding="utf-8")) if HISTORY_FILE.exists() else {}
+    today = date.today().isoformat()
+    for kind, items in (("job", jobs), ("news", news)):
+        for item in items:
+            url = item.get("url")
+            if not url:
+                continue
+            existing = data.get(url, {})
+            resolved_status = "emailed" if existing.get("status") == "emailed" else status
+            data[url] = {**item, "kind": kind, "seen_at": existing.get("seen_at", today), "status": resolved_status}
+    HISTORY_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
 def load_queries() -> tuple[list, list]:
@@ -405,6 +435,7 @@ def finalize_and_send(jobs: list, news: list, log=print, to_addr: str | None = N
         if item.get("url"):
             seen[item["url"]] = date.today().isoformat()
     save_seen(seen)
+    record_history(jobs, news, status="emailed")
     return html_path
 
 
@@ -438,6 +469,7 @@ def run_digest(log=print, dry_run: bool = False, skip_email: bool = False) -> tu
         REPORTS_DIR.mkdir(exist_ok=True)
         html_path = REPORTS_DIR / f"digest-{date.today().isoformat()}-preview.html"
         html_path.write_text(html, encoding="utf-8")
+        record_history(jobs, news, status="found")
         log(f"Saved digest to {html_path}")
         log("Preview only — not sending email or updating the seen store.")
         return html_path, False, jobs, news

@@ -33,11 +33,13 @@ class DigestBackend(QObject):
     dateLabelChanged = Signal()
     busyChanged = Signal()
     settingsChanged = Signal()
+    historyChanged = Signal()
 
     def __init__(self):
         super().__init__()
         self._jobs = []
         self._news = []
+        self._history = []
         self._status = "Ready."
         self._date_label = "No scan run yet"
         self._busy = False
@@ -52,6 +54,7 @@ class DigestBackend(QObject):
         self._job_queries_text = ""
         self._news_queries_text = ""
         self.loadSettings()
+        self.loadHistory()
 
     # -- Qt properties exposed to QML -------------------------------------
 
@@ -62,6 +65,10 @@ class DigestBackend(QObject):
     @Property("QVariantList", notify=newsChanged)
     def news(self):
         return self._news
+
+    @Property("QVariantList", notify=historyChanged)
+    def history(self):
+        return self._history
 
     @Property(str, notify=statusChanged)
     def status(self):
@@ -145,6 +152,7 @@ class DigestBackend(QObject):
                 self.jobsChanged.emit()
                 self.newsChanged.emit()
                 self.dateLabelChanged.emit()
+                self.loadHistory()
                 self._set_status(
                     f"Found {len(self._jobs)} new roles and {len(self._news)} news items."
                 )
@@ -166,12 +174,18 @@ class DigestBackend(QObject):
             try:
                 digest_engine.finalize_and_send(self._jobs, self._news, log=self._set_status)
                 self._set_status("Digest emailed.")
+                self.loadHistory()
             except Exception as e:
                 self._set_status(f"Email failed: {e}")
             finally:
                 self._set_busy(False)
 
         threading.Thread(target=worker, daemon=True).start()
+
+    @Slot()
+    def loadHistory(self):
+        self._history = digest_engine.load_history()
+        self.historyChanged.emit()
 
     @Slot()
     def loadSettings(self):
