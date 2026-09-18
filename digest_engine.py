@@ -98,8 +98,12 @@ content, and anything not UK-based). For each one, write a concise \
 one-line note explaining the role and why it's notable. Do not invent \
 anything not present in the search results.
 
+Also classify each posting's seniority level from its title/content as ONE of: \
+"Graduate/Intern", "Analyst/Junior", "Associate/Mid", "Manager/Senior", \
+"Director/Partner+". If the level truly can't be determined, use "Unspecified".
+
 Respond with ONLY a JSON object in this exact shape, nothing else:
-{{"items": [{{"title": "...", "firm": "...", "note": "...", "url": "..."}}]}}
+{{"items": [{{"title": "...", "firm": "...", "seniority": "...", "note": "...", "url": "..."}}]}}
 If nothing qualifies, respond with: {{"items": []}}
 """
 
@@ -289,6 +293,7 @@ def build_html(jobs: list, news: list) -> str:
             parts.append(
                 f'<li><b>{escape(j.get("title",""))}</b>'
                 f'{" &mdash; " + escape(j["firm"]) if j.get("firm") else ""}'
+                f'{" (" + escape(j["seniority"]) + ")" if j.get("seniority") else ""}'
                 f'<br>{escape(j.get("note",""))}'
                 f'<br><a href="{escape(j.get("url",""))}">{escape(j.get("url",""))}</a></li><br>'
             )

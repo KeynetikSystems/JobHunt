@@ -278,7 +278,7 @@ ApplicationWindow {
                                             wrapMode: Text.WordWrap
                                         }
                                         Text {
-                                            text: (modelData.firm || "") + "  ·  " + (modelData.seniority || "n/a")
+                                            text: (modelData.firm || "") + "  ·  " + (modelData.seniority || "Unspecified")
                                             color: brass
                                             font.family: "Courier"
                                             font.pixelSize: 11
