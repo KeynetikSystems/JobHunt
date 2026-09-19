@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'ad_config.dart';
 import 'api_client.dart';
+import 'notifications.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/settings_screen.dart';
@@ -12,6 +13,7 @@ void main() {
   if (AdConfig.adsSupported) {
     MobileAds.instance.initialize();
   }
+  NotificationService.instance.init();
   runApp(const JobHuntApp());
 }
 

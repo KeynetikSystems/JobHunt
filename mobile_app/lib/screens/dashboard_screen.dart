@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../api_client.dart';
 import '../models/job_listing.dart';
 import '../models/news_item.dart';
+import '../notifications.dart';
 import '../theme.dart';
 import '../widgets/banner_ad_widget.dart';
 import '../widgets/inline_ad_card.dart';
@@ -51,6 +52,7 @@ class DashboardScreenState extends State<DashboardScreen> {
         _dateLabel = _formatToday();
         _status = 'Found ${_jobs.length} new roles and ${_news.length} news items.';
       });
+      NotificationService.instance.showScanResults(jobCount: result.jobs.length, newsCount: result.news.length);
     } catch (e) {
       if (!mounted) return;
       setState(() => _status = 'Scan failed: $e');

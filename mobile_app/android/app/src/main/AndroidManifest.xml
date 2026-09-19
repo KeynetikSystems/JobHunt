@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Runtime-requested on Android 13+ before showing a local notification for scan results. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="jobhunt_mobile"
         android:name="${applicationName}"
