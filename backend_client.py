@@ -47,9 +47,21 @@ def _auth_headers(api_key: str) -> dict:
 
 def register(base_url: str, email: str) -> str:
     """Registers (or re-registers) this email and returns the API key. The key is inert
-    until the verification email is clicked — see auth.require_verified_user server-side."""
+    until the verification email is clicked — see auth.require_verified_user server-side.
+
+    Registering an email that already belongs to a *verified* account doesn't return a
+    key here at all (recovery_email_sent=True instead) — the server emails a fresh one
+    to that address rather than handing it back over HTTP to whoever merely typed the
+    email in, since that would let anyone hijack a known email into an account
+    takeover. Raises BackendError with a message telling the caller to check their
+    inbox in that case."""
     result = _request("POST", f"{base_url}/api/register", {"Content-Type": "application/json"}, {"email": email})
-    return result["api_key"]
+    api_key = result.get("api_key")
+    if api_key:
+        return api_key
+    raise BackendError(
+        "This email already has a verified account — check your inbox for a new access key."
+    )
 
 
 def scan(base_url: str, api_key: str) -> dict:

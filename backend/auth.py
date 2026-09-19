@@ -3,7 +3,14 @@ No billing gate yet; /api/register hands out a key immediately, but it only work
 once the email it was issued for is verified (require_verified_user) — otherwise
 anyone could register under an address they don't own to bypass free-tier caps or
 have digests emailed to someone who never asked for them.
+
+Keys are stored only as a SHA-256 hash (users.api_key_hash) — the raw key is shown to
+the caller exactly once, at issuance, and never persisted. A high-entropy token like
+this (192 bits from secrets.token_urlsafe(24)) doesn't need a slow/salted password hash;
+it needs a fast one-way lookup, which SHA-256 provides. This means a database leak alone
+no longer hands out working credentials for every account.
 """
+import hashlib
 import secrets
 
 from fastapi import Depends, Header, HTTPException
@@ -15,13 +22,19 @@ def generate_api_key() -> str:
     return "jh_" + secrets.token_urlsafe(24)
 
 
+def hash_api_key(key: str) -> str:
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+
 def generate_verify_token() -> str:
     return secrets.token_urlsafe(24)
 
 
 def require_user(x_api_key: str = Header(...)) -> dict:
     with db.get_db() as conn:
-        row = conn.execute("SELECT * FROM users WHERE api_key = ?", (x_api_key,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM users WHERE api_key_hash = ?", (hash_api_key(x_api_key),)
+        ).fetchone()
     if not row:
         raise HTTPException(status_code=401, detail="Invalid API key")
     return dict(row)

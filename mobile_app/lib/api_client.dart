@@ -36,6 +36,11 @@ class ApiClient {
     email = prefs.getString(_emailKey);
   }
 
+  /// Registering an email that already belongs to a *verified* account doesn't return
+  /// a key here at all — the server emails a fresh one to that address instead of
+  /// handing it back over HTTP to whoever merely typed the email in (that would let
+  /// anyone hijack a known email into an account takeover). Throws in that case with a
+  /// message telling the caller to check their inbox, rather than connecting.
   Future<void> register(String baseUrl, String email) async {
     final normalizedUrl = baseUrl.endsWith('/')
         ? baseUrl.substring(0, baseUrl.length - 1)
@@ -48,7 +53,12 @@ class ApiClient {
     if (res.statusCode != 200) {
       throw Exception('Registration failed (${res.statusCode}): ${res.body}');
     }
-    final key = (jsonDecode(res.body) as Map<String, dynamic>)['api_key'] as String;
+    final key = (jsonDecode(res.body) as Map<String, dynamic>)['api_key'] as String?;
+    if (key == null) {
+      throw Exception(
+        'This email already has a verified account — check your inbox for a new access key.',
+      );
+    }
 
     this.baseUrl = normalizedUrl;
     apiKey = key;

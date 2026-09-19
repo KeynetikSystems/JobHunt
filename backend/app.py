@@ -26,6 +26,7 @@ Run locally:
     uvicorn app:app --reload
 Then open http://127.0.0.1:8000/docs for interactive testing.
 """
+import os
 import smtplib
 import sys
 import threading
@@ -48,11 +49,16 @@ import db  # noqa: E402
 app = FastAPI(title="JobHunt backend")
 db.init_db()
 
-# Permissive for local development against the Flutter/desktop clients. Tighten to your
-# real client origins before this is reachable from the public internet.
+# The mobile and desktop clients are native apps, not browser pages — CORS is a
+# browser-only enforcement mechanism and doesn't affect them either way. This only
+# matters for stopping some third-party website's JavaScript from calling this API
+# from a visitor's browser. Defaults to allowing none (safe) rather than "*" (was
+# previously wide open to any origin); set ALLOWED_ORIGINS to a comma-separated list
+# if a real browser-based client (e.g. an admin dashboard) is ever added.
+_allowed_origins = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -164,7 +170,13 @@ class RegisterRequest(BaseModel):
 
 
 class RegisterResponse(BaseModel):
-    api_key: str
+    # Present for a new signup or a retry of one that never got verified — neither case
+    # exposes anything sensitive yet, since require_verified_user blocks everything
+    # until verified. Absent (recovery_email_sent=True instead) for an already-verified
+    # account, where handing a working key straight back over HTTP to whoever merely
+    # typed that email in would be an account-takeover primitive.
+    api_key: str | None = None
+    recovery_email_sent: bool = False
 
 
 class ScanResponse(BaseModel):
@@ -272,6 +284,35 @@ def _send_verification_email(to_addr: str, verify_url: str) -> None:
         server.send_message(msg)
 
 
+def _send_recovery_email(to_addr: str, api_key: str) -> None:
+    """Delivers a freshly-issued API key to an already-verified account's own inbox —
+    the only safe way to hand it over, since the HTTP response itself never can (see
+    RegisterResponse). Requires SMTP to be configured; if it's not, recovery for
+    verified accounts genuinely doesn't work yet, same tradeoff as verification email."""
+    env = digest_engine.load_env()
+    smtp_host = env.get("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(env.get("SMTP_PORT", "587"))
+    smtp_user = env.get("SMTP_USER")
+    smtp_pass = env.get("SMTP_PASS")
+    if not smtp_user or not smtp_pass:
+        raise RuntimeError("SMTP_USER and SMTP_PASS must be set in the server's .env")
+
+    msg = MIMEText(
+        f"A new access key was requested for your JobHuntAI account:\n\n{api_key}\n\n"
+        "Your old key no longer works. Paste this one into the app's Settings/Backend "
+        "connection screen. If you didn't request this, someone else knows your email "
+        "address — consider that before reusing this key."
+    )
+    msg["Subject"] = "Your new access key — JobHuntAI"
+    msg["From"] = smtp_user
+    msg["To"] = to_addr
+
+    with smtplib.SMTP(smtp_host, smtp_port) as server:
+        server.starttls()
+        server.login(smtp_user, smtp_pass)
+        server.send_message(msg)
+
+
 def _mark_seen(user_id: int, jobs: list, news: list) -> None:
     """Records jobs/news as seen for this user, keeping their details so /api/history
     can show what was previously surfaced, not just that a URL was dismissed."""
@@ -342,14 +383,44 @@ def register(body: RegisterRequest, request: Request):
     """Issues an API key immediately, but it's inert (require_verified_user rejects
     it) until the recipient clicks the link this sends — otherwise anyone could
     register under an address they don't own to dodge free-tier caps with disposable
-    accounts, or have digests emailed to someone who never asked for them."""
+    accounts, or have digests emailed to someone who never asked for them.
+
+    email is UNIQUE, so registering an address that already exists doesn't create a
+    second, orphaned account — it recovers the existing one instead:
+    - Not yet verified: nothing sensitive is protected yet, so this just re-issues a
+      key and resends verification, exactly as if it were a first registration.
+    - Already verified: a real account with real data is at stake, so the new key is
+      never returned in this response (anyone who merely knows the email could ask for
+      it otherwise) — it's emailed to the address that already proved ownership."""
+    with db.get_db() as conn:
+        existing = conn.execute("SELECT * FROM users WHERE email = ?", (body.email,)).fetchone()
+
+    if existing and existing["email_verified"]:
+        api_key = auth.generate_api_key()
+        with db.get_db() as conn:
+            conn.execute(
+                "UPDATE users SET api_key_hash = ? WHERE id = ?",
+                (auth.hash_api_key(api_key), existing["id"]),
+            )
+        try:
+            _send_recovery_email(body.email, api_key)
+        except Exception as e:
+            print(f"Recovery email failed for {body.email}: {e}")
+        return RegisterResponse(recovery_email_sent=True)
+
     api_key = auth.generate_api_key()
     verify_token = auth.generate_verify_token()
     with db.get_db() as conn:
-        conn.execute(
-            "INSERT INTO users (api_key, email, verify_token) VALUES (?, ?, ?)",
-            (api_key, body.email, verify_token),
-        )
+        if existing:
+            conn.execute(
+                "UPDATE users SET api_key_hash = ?, verify_token = ? WHERE id = ?",
+                (auth.hash_api_key(api_key), verify_token, existing["id"]),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO users (api_key_hash, email, verify_token) VALUES (?, ?, ?)",
+                (auth.hash_api_key(api_key), body.email, verify_token),
+            )
     verify_url = f"{str(request.base_url).rstrip('/')}/api/verify?token={verify_token}"
     try:
         _send_verification_email(body.email, verify_url)

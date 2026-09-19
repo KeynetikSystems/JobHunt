@@ -2,6 +2,42 @@
 
 ## 2026-09-19
 
+### Release-readiness hardening
+
+Closed three of the five release blockers identified in a deployment-risk review (see
+[DESIGN.md](DESIGN.md)'s "Known gaps and risks" for the full picture, including the two
+still open that need a human, not code):
+
+- **API keys hashed at rest.** `users.api_key_hash` (SHA-256) replaces plaintext
+  `api_key`. Existing rows are migrated automatically (`db._backfill_api_key_hashes`);
+  a database leak alone no longer hands out working credentials for every account.
+- **Account recovery.** `email` is now UNIQUE. Re-registering an existing, unverified
+  email safely re-issues a key directly (nothing sensitive is at stake pre-verification
+  anyway); re-registering an existing, *verified* email never returns the key over HTTP
+  — it's emailed to the address that already proved ownership, since handing it back
+  directly would let anyone who merely knows an email hijack that account. Both clients
+  (`api_client.dart`, `backend_client.py`) updated to handle the new "check your email"
+  response shape.
+- **CORS locked down.** `allow_origins=["*"]` → `ALLOWED_ORIGINS` env var, empty by
+  default. Native clients were never affected by CORS either way (it's a browser-only
+  mechanism); this only ever mattered for stopping a browser-based third party from
+  calling the API cross-origin.
+- **Railway volume risk converted from "unconfirmed" to "self-checking."** `db.init_db()`
+  now warns loudly at startup if it detects it's running on Railway (`RAILWAY_*` env
+  vars present) without a `DB_PATH` override — so a misconfigured volume shows up in
+  the deploy logs instead of silently wiping every user's data on the next redeploy.
+
+Verified against a locally-run backend instance with **both** `DB_PATH` and
+`TAVILY_API_KEY`/`GROQ_API_KEY` isolated this time (see the credentials-isolation
+lesson from the previous incident): confirmed keys are hashed not plaintext, an old key
+is invalidated the moment a new one is issued, a verified account's re-registration
+correctly withholds the key, and no duplicate rows are created.
+
+**Not fixed here** (need a human, not more code): real billing is still a manual
+`/api/upgrade-request` review; `PRIVACY.md`/`TERMS.md` haven't had actual legal review;
+desktop is still missing Slack/Telegram alerts config and Privacy/Terms links versus
+mobile (found during a parity re-check, not yet closed).
+
 ### Repo organization: split today's work into feature branches, now merged
 
 Everything below this entry was developed in one working session with no intermediate

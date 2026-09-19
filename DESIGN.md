@@ -115,19 +115,27 @@ drift):
 Auth is one header (`X-API-Key`), one SQLite lookup (`backend/auth.py`) — no session,
 no OAuth. `require_user` vs `require_verified_user` is the only access-control axis
 today; there's no per-plan route gating beyond the caps enforced inline in each handler.
+API keys are looked up by SHA-256 hash (`users.api_key_hash`), never stored raw.
 
 ## Known gaps and risks (as of 2026-09-19)
 
-Carried over from a deployment-architecture discussion — not yet acted on except where
-noted:
+**Fixed** in the release-readiness hardening pass:
+- ~~API keys stored in plaintext~~ — now hashed (`auth.hash_api_key`, SHA-256). A DB
+  leak alone no longer hands out working credentials.
+- ~~No account recovery~~ — `email` is now UNIQUE. Re-registering an existing,
+  unverified email safely re-issues a key directly; re-registering an existing,
+  *verified* email emails a fresh key to that address instead of returning it over
+  HTTP (which would otherwise let anyone who knows an email hijack that account).
+- ~~CORS wide open (`allow_origins=["*"]`)~~ — now `ALLOWED_ORIGINS` env var, empty by
+  default. Native clients (mobile, desktop) were never affected by CORS either way;
+  this only ever mattered for stopping a browser-based third party.
+- **Railway volume — now self-checking, not just "unconfirmed".** `db.init_db()` warns
+  loudly at startup if it detects `RAILWAY_*` env vars but no `DB_PATH` override, so a
+  misconfigured volume shows up in the deploy logs instead of silently wiping data on
+  the next redeploy. Still worth an explicit one-time check of the Railway dashboard —
+  the warning only fires if the app has actually started once to log it.
 
-- **API keys stored in plaintext** in `users.api_key` (SQLite). Should be hashed before
-  storage; currently a DB leak is an instant full-account-takeover for every user.
-- **No account recovery.** `users.email` has no UNIQUE constraint — re-registering the
-  same email silently creates a second, orphaned account instead of recovering the
-  first. A user who loses their API key has no way back into their existing account.
-- **Unconfirmed**: whether the Railway persistent volume for `DB_PATH` is actually
-  mounted. If not, every redeploy wipes every user's account, CV, and history.
+**Still open:**
 - **No real billing.** Plan upgrades are a manual review of `/api/upgrade-request`
   entries. This is the ceiling on monetizing everything else in the system.
 - **No per-user saved query lists on the backend.** Desktop used to have a local raw
@@ -135,6 +143,10 @@ noted:
   the one shared default set plus ad-hoc single-query search. If that flexibility is
   wanted again, it needs a real backend feature (a `queries` table, an endpoint), not a
   per-client hack.
+- **Legal docs (`PRIVACY.md`/`TERMS.md`) haven't been reviewed** for actual legal
+  adequacy by anyone — separate from the engineering checklist entirely.
+- **Desktop still lacks** premium Slack/Telegram alerts config and Privacy/Terms links
+  in Settings — found during a mobile/desktop parity re-check, not addressed yet.
 
 ## Open product questions
 
