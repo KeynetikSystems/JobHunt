@@ -15,6 +15,12 @@ class ScanResult {
 /// Talks to the JobHunt backend (backend/app.py). The app never holds Tavily/Groq/SMTP
 /// credentials — only this backend's own API key, obtained via register().
 class ApiClient {
+  /// Pre-fills the Backend URL field so a fresh install doesn't require anyone to know
+  /// or type this — still fully editable in Settings for local dev, staging, or if this
+  /// ever moves (custom domain, different host). Never auto-connects on its own: a
+  /// real api_key only exists after the user enters their email and taps Connect.
+  static const defaultBackendUrl = 'https://jobhuntai-production-ed1d.up.railway.app';
+
   static const _baseUrlKey = 'backend_base_url';
   static const _apiKeyKey = 'backend_api_key';
   static const _emailKey = 'backend_email';
@@ -31,7 +37,7 @@ class ApiClient {
 
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
-    baseUrl = prefs.getString(_baseUrlKey);
+    baseUrl = prefs.getString(_baseUrlKey) ?? defaultBackendUrl;
     apiKey = prefs.getString(_apiKeyKey);
     email = prefs.getString(_emailKey);
   }
@@ -71,7 +77,7 @@ class ApiClient {
   }
 
   Future<void> disconnect() async {
-    baseUrl = null;
+    baseUrl = defaultBackendUrl;
     apiKey = null;
     email = null;
     final prefs = await SharedPreferences.getInstance();

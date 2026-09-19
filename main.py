@@ -25,6 +25,8 @@ from config import load_env, save_env
 
 # Rank used to sort jobs by seniority — lower is more junior, matching the mobile
 # app's seniorityRankOf(). Anything unrecognized sorts last.
+_DEFAULT_BACKEND_URL = "https://jobhuntai-production-ed1d.up.railway.app"
+
 _SENIORITY_RANK = {
     "Graduate/Intern": 0,
     "Analyst/Junior": 1,
@@ -210,7 +212,7 @@ class DigestBackend(QObject):
 
     @Slot()
     def disconnect(self):
-        self._backend_url = ""
+        self._backend_url = _DEFAULT_BACKEND_URL
         self._api_key = ""
         self._email = ""
         self._account = {}
@@ -431,7 +433,11 @@ class DigestBackend(QObject):
     @Slot()
     def loadSettings(self):
         env = load_env()
-        self._backend_url = env.get("BACKEND_URL", "")
+        # Pre-fills the Backend URL field so a fresh install doesn't require anyone to
+        # know or type this — still fully editable in Settings for local dev, staging,
+        # or if this ever moves. Never auto-connects on its own: connected requires a
+        # real api_key too, which only exists after Connect is actually pressed.
+        self._backend_url = env.get("BACKEND_URL") or _DEFAULT_BACKEND_URL
         self._api_key = env.get("BACKEND_API_KEY", "")
         self._email = env.get("BACKEND_EMAIL", "")
         self.settingsChanged.emit()

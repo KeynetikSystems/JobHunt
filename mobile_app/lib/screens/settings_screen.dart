@@ -179,7 +179,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _disconnect() async {
     await ApiClient.instance.disconnect();
     setState(() {
-      _urlCtrl.clear();
+      _urlCtrl.text = ApiClient.instance.baseUrl ?? '';
       _emailCtrl.clear();
       _cvCtrl.clear();
       _slackCtrl.clear();
