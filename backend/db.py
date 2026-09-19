@@ -19,6 +19,10 @@ CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     api_key TEXT UNIQUE NOT NULL,
     email TEXT NOT NULL,
+    cv_text TEXT NOT NULL DEFAULT '',
+    plan TEXT NOT NULL DEFAULT 'free',
+    slack_webhook_url TEXT NOT NULL DEFAULT '',
+    telegram_chat_id TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -36,6 +40,24 @@ CREATE TABLE IF NOT EXISTS seen_items (
     seen_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (user_id, url)
 );
+
+-- One row per rate-limited action performed, used to enforce free-plan usage caps
+-- (e.g. AI application-material drafts per day) without a separate billing system.
+CREATE TABLE IF NOT EXISTS usage_log (
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    action TEXT NOT NULL,
+    used_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Self-serve "I want premium" signal, captured instead of building real billing
+-- before there's evidence anyone wants it. A human reviews these and flips plan
+-- to 'premium' by hand.
+CREATE TABLE IF NOT EXISTS upgrade_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    note TEXT NOT NULL DEFAULT '',
+    requested_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 # Columns added after the initial release. CREATE TABLE IF NOT EXISTS above only
@@ -50,6 +72,13 @@ _SEEN_ITEMS_MIGRATIONS = [
     ("headline", "TEXT"),
     ("source", "TEXT"),
     ("summary", "TEXT"),
+]
+
+_USERS_MIGRATIONS = [
+    ("cv_text", "TEXT NOT NULL DEFAULT ''"),
+    ("plan", "TEXT NOT NULL DEFAULT 'free'"),
+    ("slack_webhook_url", "TEXT NOT NULL DEFAULT ''"),
+    ("telegram_chat_id", "TEXT NOT NULL DEFAULT ''"),
 ]
 
 
@@ -72,3 +101,7 @@ def init_db() -> None:
         for name, coltype in _SEEN_ITEMS_MIGRATIONS:
             if name not in existing:
                 conn.execute(f"ALTER TABLE seen_items ADD COLUMN {name} {coltype}")
+        existing_users = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
+        for name, coltype in _USERS_MIGRATIONS:
+            if name not in existing_users:
+                conn.execute(f"ALTER TABLE users ADD COLUMN {name} {coltype}")
