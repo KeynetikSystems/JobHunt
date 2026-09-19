@@ -12,6 +12,9 @@
 .swiftpm/
 migrate_working_dir/
 
+# Local isolated Android SDK home used for build troubleshooting — not project source.
+.android-home/
+
 # IntelliJ related
 *.iml
 *.ipr

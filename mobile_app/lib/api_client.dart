@@ -102,6 +102,37 @@ class ApiClient {
     return ScanResult(jobs, news);
   }
 
+  Future<ScanResult> search(String query) async {
+    _requireConnected();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/search'),
+      headers: _authHeaders,
+      body: jsonEncode({'query': query}),
+    );
+    if (res.statusCode != 200) {
+      throw Exception(_errorDetail(res));
+    }
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    final jobs = (data['jobs'] as List)
+        .map((j) => JobListing(
+              title: j['title'] ?? '',
+              firm: j['firm'] ?? '',
+              seniority: j['seniority'] ?? 'Unspecified',
+              note: j['note'] ?? '',
+              url: j['url'] ?? '',
+            ))
+        .toList();
+    final news = (data['news'] as List)
+        .map((n) => NewsItem(
+              headline: n['headline'] ?? '',
+              source: n['source'] ?? '',
+              summary: n['summary'] ?? '',
+              url: n['url'] ?? '',
+            ))
+        .toList();
+    return ScanResult(jobs, news);
+  }
+
   Future<void> dismiss({List<JobListing> jobs = const [], List<NewsItem> news = const []}) async {
     _requireConnected();
     if (jobs.isEmpty && news.isEmpty) return;

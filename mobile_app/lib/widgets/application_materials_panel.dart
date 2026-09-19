@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../api_client.dart';
+import '../error_utils.dart';
 import '../theme.dart';
 
 /// "Draft CV highlights & cover letter" button + inline result panel, shared
@@ -34,7 +35,7 @@ class _ApplicationMaterialsPanelState extends State<ApplicationMaterialsPanel> {
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = '$e');
+      setState(() => _error = friendlyError(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -115,7 +116,7 @@ class _ApplicationMaterialsPanelState extends State<ApplicationMaterialsPanel> {
               minimumSize: const Size(0, 0),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            child: const Text('Copy', style: TextStyle(fontSize: 10)),
+            child: const Text('Copy', style: TextStyle(fontSize: 11)),
           ),
         ),
       ],

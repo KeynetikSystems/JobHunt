@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../api_client.dart';
+import '../error_utils.dart';
 import '../models/history_item.dart';
 import '../theme.dart';
 import '../widgets/history_card.dart';
@@ -43,7 +44,7 @@ class HistoryScreenState extends State<HistoryScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _status = 'Could not load history: $e');
+      setState(() => _status = 'Could not load history: ${friendlyError(e)}');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -78,6 +79,7 @@ class HistoryScreenState extends State<HistoryScreen> {
                 ),
                 IconButton(
                   onPressed: connected && !_busy ? _load : null,
+                  tooltip: 'Refresh history',
                   icon: const Icon(Icons.refresh, color: LedgerColors.brass),
                 ),
               ],

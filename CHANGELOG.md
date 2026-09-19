@@ -2,26 +2,22 @@
 
 ## 2026-09-19
 
-### Repo organization: split today's work into feature branches
+### Repo organization: split today's work into feature branches, now merged
 
 Everything below this entry was developed in one working session with no intermediate
-commits, then split after the fact into separate branches so each piece can be
+commits, then split after the fact into separate branches so each piece could be
 reviewed/merged independently, mirroring the repo's existing `feature/*` convention
-(`feature/history-viewer`, `feature/ai-application-materials`, now merged into `main`):
+(`feature/history-viewer`, `feature/ai-application-materials`, also merged into `main`):
 
 | Branch | Contains |
 |---|---|
 | `feature/backend-custom-search` | `POST /api/search` — shared dependency of both clients below |
 | `feature/mobile-custom-search` | The "Mobile" entries below |
 | `feature/desktop-hosted-backend` | The "Desktop" entries below |
-| `main` | Only the Android build fixes (already independently verified) and this changelog |
 
-**Merge order matters**: `feature/mobile-custom-search` and `feature/desktop-hosted-backend`
-both call `POST /api/search`, so `feature/backend-custom-search` needs to land first (or
-be rebased under them) before either client branch actually works end-to-end. All three
-are pushed to `origin`; `main` itself is intentionally held back from a push pending a
-check of whether Railway auto-deploys from it, since 5 of its unpushed commits predate
-this session and haven't been reviewed here.
+All three are now merged into `main`, backend first (both clients depend on
+`POST /api/search`). See the "Release-readiness hardening" entry above for what shipped
+on top of this merge.
 
 ### Desktop: migrated onto the hosted backend (shared API keys)
 
