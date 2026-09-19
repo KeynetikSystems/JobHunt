@@ -21,6 +21,7 @@ ApplicationWindow {
     readonly property color hairline: "#2B3140"
 
     property string currentPage: "dashboard"
+    property string feedFilter: "all"
 
     RowLayout {
         anchors.fill: parent
@@ -167,7 +168,7 @@ ApplicationWindow {
                         text: backend.busy ? "Working…" : "Run scan now"
                         enabled: !backend.busy
                         hoverEnabled: true
-                        ToolTip.text: "Search for new listings and news — doesn't send an email or affect what's already been sent"
+                        ToolTip.text: "Pulls your unseen items from the shared scan (refreshed roughly hourly) — doesn't send an email or affect what's already been sent"
                         ToolTip.visible: hovered
                         ToolTip.delay: 400
                         onClicked: backend.runScan()
@@ -234,6 +235,48 @@ ApplicationWindow {
                     }
                 }
 
+                // feed filter / sort bar
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    visible: backend.jobs.length > 0 || backend.news.length > 0
+
+                    FilterChip {
+                        label: "All"
+                        selected: root.feedFilter === "all"
+                        onClicked: root.feedFilter = "all"
+                    }
+                    FilterChip {
+                        label: "Jobs (" + backend.jobs.length + ")"
+                        selected: root.feedFilter === "jobs"
+                        onClicked: root.feedFilter = "jobs"
+                    }
+                    FilterChip {
+                        label: "News (" + backend.news.length + ")"
+                        selected: root.feedFilter === "news"
+                        onClicked: root.feedFilter = "news"
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    Button {
+                        visible: root.feedFilter !== "news" && backend.jobs.length > 0
+                        flat: true
+                        padding: 4
+                        hoverEnabled: true
+                        ToolTip.text: backend.seniorityDescending ? "Seniority: senior first — click to reverse" : "Seniority: junior first — click to reverse"
+                        ToolTip.visible: hovered
+                        ToolTip.delay: 400
+                        onClicked: backend.toggleSenioritySort()
+                        background: Rectangle { color: "transparent" }
+                        contentItem: Text {
+                            text: backend.seniorityDescending ? "Seniority ↓" : "Seniority ↑"
+                            color: brass
+                            font.pixelSize: 11
+                        }
+                    }
+                }
+
                 // scrollable ledger feed
                 ScrollView {
                     id: dashboardScroll
@@ -249,6 +292,7 @@ ApplicationWindow {
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: 10
+                            visible: root.feedFilter !== "news"
 
                             Text {
                                 text: "New opportunities (" + backend.jobs.length + ")"
@@ -285,11 +329,30 @@ ApplicationWindow {
                                         anchors.left: parent.left
                                     }
 
+                                    Text {
+                                        text: "✕"
+                                        color: slate
+                                        font.pixelSize: 13
+                                        anchors.top: parent.top
+                                        anchors.right: parent.right
+                                        anchors.margins: 8
+                                        z: 1
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            anchors.margins: -6
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: backend.dismissItem(modelData.url)
+                                        }
+                                    }
+
                                     ColumnLayout {
                                         id: jobCol
                                         anchors.fill: parent
                                         anchors.margins: 14
                                         anchors.leftMargin: 20
+                                        anchors.rightMargin: 28
                                         spacing: 4
 
                                         Text {
@@ -334,6 +397,7 @@ ApplicationWindow {
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: 10
+                            visible: root.feedFilter !== "jobs"
 
                             Text {
                                 text: "Market news (" + backend.news.length + ")"
@@ -363,6 +427,24 @@ ApplicationWindow {
                                         onClicked: if (modelData.url) Qt.openUrlExternally(modelData.url)
                                     }
 
+                                    Text {
+                                        text: "✕"
+                                        color: slate
+                                        font.pixelSize: 13
+                                        anchors.top: parent.top
+                                        anchors.right: parent.right
+                                        anchors.margins: 8
+                                        z: 1
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            anchors.margins: -6
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: backend.dismissItem(modelData.url)
+                                        }
+                                    }
+
                                     Rectangle {
                                         width: 3
                                         height: parent.height
@@ -375,6 +457,7 @@ ApplicationWindow {
                                         anchors.fill: parent
                                         anchors.margins: 14
                                         anchors.leftMargin: 20
+                                        anchors.rightMargin: 28
                                         spacing: 4
 
                                         Text {
@@ -412,6 +495,48 @@ ApplicationWindow {
                         }
                     }
                 }
+
+                // -- ad-hoc search, alongside the saved query-list scan above --------
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+
+                    TextField {
+                        id: searchField
+                        Layout.fillWidth: true
+                        placeholderText: "Search for roles, firms, news…"
+                        color: parchment
+                        enabled: !backend.busy
+                        font.pixelSize: 13
+                        background: Rectangle {
+                            color: inkPanel
+                            border.color: hairline
+                            border.width: 1
+                            radius: 2
+                        }
+                        Keys.onReturnPressed: backend.runSearch(searchField.text)
+                    }
+
+                    Button {
+                        text: "Search"
+                        enabled: !backend.busy
+                        hoverEnabled: true
+                        ToolTip.text: "One-off search, separate from the saved query list above — uses your own API keys directly, no daily cap"
+                        ToolTip.visible: hovered
+                        ToolTip.delay: 400
+                        onClicked: backend.runSearch(searchField.text)
+                        background: Rectangle { color: brass; radius: 2 }
+                        contentItem: Text {
+                            text: parent.text
+                            color: "#14181F"
+                            font.pixelSize: 13
+                            font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        padding: 10
+                    }
+                }
             }
 
             // -- history page ---------------------------------------------------
@@ -441,7 +566,7 @@ ApplicationWindow {
                 }
 
                 Text {
-                    text: "Every opportunity and news item ever found by a scan, whether or not it's been emailed — newest first."
+                    text: "Everything you've emailed or dismissed, newest first."
                     color: slate
                     font.pixelSize: 13
                 }
@@ -468,13 +593,12 @@ ApplicationWindow {
                                 note: (modelData.kind === "news" ? modelData.summary : modelData.note) || ""
                                 url: modelData.url || ""
                                 seenAt: modelData.seen_at || ""
-                                status: modelData.status || "found"
                             }
                         }
 
                         Text {
                             visible: backend.history.length === 0
-                            text: "Nothing here yet. Run a scan to start building history."
+                            text: "Nothing here yet — items you email or dismiss will show up here."
                             color: slate
                             font.italic: true
                             font.pixelSize: 12
@@ -506,140 +630,132 @@ ApplicationWindow {
                     ColumnLayout {
                         id: settingsColumn
                         width: settingsScroll.availableWidth - 60
-                        spacing: 28
+                        spacing: 20
 
-                        ColumnLayout {
+                        // -- connection status -------------------------------------
+                        Rectangle {
                             Layout.fillWidth: true
-                            spacing: 10
+                            implicitHeight: connectionRow.implicitHeight + 24
+                            color: inkPanel
+                            border.color: hairline
+                            border.width: 1
 
-                            Text {
-                                text: "Email delivery"
-                                color: parchment
-                                font.family: "Georgia"
-                                font.pixelSize: 16
-                            }
+                            RowLayout {
+                                id: connectionRow
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 8
 
-                            SettingsField {
-                                label: "Send digest to"; text: backend.recipientEmail; id: recipientField
-                                tooltip: "The email address that receives the daily digest"
-                            }
-                            SettingsField {
-                                label: "SMTP host"; text: backend.smtpHost; id: smtpHostField
-                                tooltip: "Your email provider's outgoing mail server, e.g. smtp.gmail.com"
-                            }
-                            SettingsField {
-                                label: "SMTP port"; text: backend.smtpPort; id: smtpPortField
-                                tooltip: "Usually 587 (STARTTLS)"
-                            }
-                            SettingsField {
-                                label: "SMTP username"; text: backend.smtpUser; id: smtpUserField
-                                tooltip: "Your full email address, used to log in to the SMTP server"
-                            }
-                            SettingsField {
-                                label: "SMTP password"; text: backend.smtpPass; id: smtpPassField; masked: true
-                                tooltip: "For Gmail/Outlook, use an app password, not your regular login password"
-                            }
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 10
-
-                            Text {
-                                text: "API keys"
-                                color: parchment
-                                font.family: "Georgia"
-                                font.pixelSize: 16
-                            }
-
-                            SettingsField {
-                                label: "T-key"; text: backend.tavilyKey; id: tavilyField; masked: true
-                                // tooltip: "From app.tavily.com — used to search the web for listings and news"
-                            }
-                            SettingsField {
-                                label: "G-key"; text: backend.groqKey; id: groqField; masked: true
-                                // tooltip: "From console.groq.com — used to summarize search results"
-                            }
-                            SettingsField {
-                                label: "Groq model"; text: backend.groqModel; id: groqModelField
-                                tooltip: "Groq model id used for summarization, e.g. openai/gpt-oss-120b"
-                            }
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 10
-
-                            Text {
-                                text: "Search queries (one per line)"
-                                color: parchment
-                                font.family: "Georgia"
-                                font.pixelSize: 16
-                            }
-
-                            Text { text: "Job queries"; color: slate; font.pixelSize: 12 }
-                            ScrollView {
-                                id: jobQueriesScroll
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 160
-                                clip: true
-                                TextArea {
-                                    id: jobQueriesArea
-                                    width: jobQueriesScroll.availableWidth
-                                    text: backend.jobQueriesText
-                                    color: parchment
-                                    font.family: "Courier"
-                                    font.pixelSize: 12
-                                    wrapMode: Text.WordWrap
-                                    hoverEnabled: true
-                                    ToolTip.text: "One search query per line — each runs as a separate Tavily search"
-                                    ToolTip.visible: hovered
-                                    ToolTip.delay: 400
-                                    background: Rectangle {
-                                        color: inkPanel
-                                        border.color: hairline
-                                        border.width: 1
-                                    }
+                                Text {
+                                    text: backend.connected ? "●" : "○"
+                                    color: backend.connected ? brass : slate
+                                    font.pixelSize: 14
                                 }
-                            }
-
-                            Text { text: "News queries"; color: slate; font.pixelSize: 12 }
-                            ScrollView {
-                                id: newsQueriesScroll
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 160
-                                clip: true
-                                TextArea {
-                                    id: newsQueriesArea
-                                    width: newsQueriesScroll.availableWidth
-                                    text: backend.newsQueriesText
-                                    color: parchment
-                                    font.family: "Courier"
-                                    font.pixelSize: 12
+                                Text {
+                                    Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
-                                    hoverEnabled: true
-                                    ToolTip.text: "One search query per line — each runs as a separate Tavily search"
-                                    ToolTip.visible: hovered
-                                    ToolTip.delay: 400
-                                    background: Rectangle {
-                                        color: inkPanel
-                                        border.color: hairline
-                                        border.width: 1
-                                    }
+                                    text: backend.connected
+                                        ? "Connected as " + backend.email
+                                        : "Not connected — connect below to share the operator's Tavily/Groq keys and your free/premium plan"
+                                    color: parchment
+                                    font.pixelSize: 12
                                 }
                             }
                         }
 
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 10
+                        // -- account (only once connected + loaded) -----------------
+                        SettingsSection {
+                            title: "Account"
+                            visible: backend.connected && Object.keys(backend.account).length > 0
 
-                            Text {
-                                text: "Your background / CV"
-                                color: parchment
-                                font.family: "Georgia"
-                                font.pixelSize: 16
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Text { text: "Plan"; color: slate; font.pixelSize: 12; Layout.preferredWidth: 140 }
+                                Text {
+                                    text: backend.account.plan === "premium" ? "Premium" : "Free"
+                                    color: parchment; font.pixelSize: 12; font.bold: true
+                                }
                             }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Text { text: "Email verified"; color: slate; font.pixelSize: 12; Layout.preferredWidth: 140 }
+                                Text {
+                                    text: backend.account.email_verified ? "Yes" : "No"
+                                    color: parchment; font.pixelSize: 12; font.bold: true
+                                }
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Text { text: "AI drafts today"; color: slate; font.pixelSize: 12; Layout.preferredWidth: 140 }
+                                Text {
+                                    text: backend.account.materials_daily_cap
+                                        ? backend.account.materials_used_today + " / " + backend.account.materials_daily_cap
+                                        : backend.account.materials_used_today + " (unlimited)"
+                                    color: parchment; font.pixelSize: 12; font.bold: true
+                                }
+                            }
+
+                            Button {
+                                visible: backend.account.email_verified === false
+                                text: "Resend verification email"
+                                enabled: !backend.busy
+                                hoverEnabled: true
+                                onClicked: backend.resendVerification()
+                                background: Rectangle { color: "transparent"; border.color: brass; border.width: 1; radius: 2 }
+                                contentItem: Text { text: parent.text; color: brass; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
+                                padding: 6
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                visible: backend.account.plan !== "premium"
+                                spacing: 8
+
+                                SettingsField {
+                                    id: upgradeNoteField
+                                    label: "Request an upgrade (optional note)"
+                                    tooltip: "e.g. I'm hitting the daily draft limit"
+                                }
+                                Button {
+                                    text: "Request upgrade"
+                                    enabled: !backend.busy
+                                    hoverEnabled: true
+                                    onClicked: { backend.requestUpgrade(upgradeNoteField.text); upgradeNoteField.text = "" }
+                                    background: Rectangle { color: "transparent"; border.color: brass; border.width: 1; radius: 2 }
+                                    contentItem: Text { text: parent.text; color: brass; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
+                                    padding: 6
+                                }
+                            }
+                        }
+
+                        // -- backend connection --------------------------------------
+                        SettingsSection {
+                            title: "Backend"
+
+                            SettingsField {
+                                label: "Backend URL"; text: backend.backendUrl; id: backendUrlField
+                                tooltip: "Where your hosted backend is running, e.g. https://your-app.up.railway.app"
+                            }
+                            SettingsField {
+                                label: "Email"; text: backend.email; id: emailField
+                                tooltip: "Used to verify your account and receive emailed digests"
+                            }
+                            Text {
+                                text: "This app no longer holds its own Tavily/Groq/SMTP keys — connecting registers " +
+                                      "this email with your backend and shares its keys and your plan's usage caps."
+                                color: slate
+                                font.pixelSize: 11
+                                font.italic: true
+                                wrapMode: Text.WordWrap
+                                Layout.fillWidth: true
+                            }
+                        }
+
+                        // -- CV (only once connected) ---------------------------------
+                        SettingsSection {
+                            title: "Your background / CV"
+                            visible: backend.connected
+
                             Text {
                                 text: "Paste your CV or a summary of your experience — used to draft tailored CV highlights and cover letters for opportunities you choose to apply to."
                                 color: slate
@@ -665,33 +781,35 @@ ApplicationWindow {
                                     ToolTip.visible: hovered
                                     ToolTip.delay: 400
                                     background: Rectangle {
-                                        color: inkPanel
+                                        color: inkBg
                                         border.color: hairline
                                         border.width: 1
                                     }
                                 }
                             }
+                            Button {
+                                text: "Save CV"
+                                enabled: !backend.busy
+                                hoverEnabled: true
+                                onClicked: backend.saveCv(cvArea.text)
+                                background: Rectangle { color: "transparent"; border.color: brass; border.width: 1; radius: 2 }
+                                contentItem: Text { text: parent.text; color: brass; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
+                                padding: 6
+                            }
                         }
                     }
                 }
 
-                // pinned footer — always visible, no scrolling needed to save
+                // pinned footer — always visible, no scrolling needed to connect
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 16
+                    spacing: 12
 
                     Button {
-                        text: "Save settings"
+                        text: backend.connected ? "Reconnect" : "Connect"
+                        enabled: !backend.busy
                         hoverEnabled: true
-                        ToolTip.text: "Writes these values to .env and queries.json"
-                        ToolTip.visible: hovered
-                        ToolTip.delay: 400
-                        onClicked: backend.saveSettings(
-                            recipientField.text, smtpHostField.text, smtpPortField.text,
-                            smtpUserField.text, smtpPassField.text,
-                            tavilyField.text, groqField.text, groqModelField.text,
-                            jobQueriesArea.text, newsQueriesArea.text, cvArea.text
-                        )
+                        onClicked: backend.connect(backendUrlField.text, emailField.text)
                         background: Rectangle { color: brass; radius: 2 }
                         contentItem: Text {
                             text: parent.text
@@ -704,7 +822,25 @@ ApplicationWindow {
                         padding: 10
                     }
 
+                    Button {
+                        visible: backend.connected
+                        text: "Disconnect"
+                        enabled: !backend.busy
+                        hoverEnabled: true
+                        onClicked: backend.disconnect()
+                        background: Rectangle { color: "transparent"; border.color: slate; border.width: 1; radius: 2 }
+                        contentItem: Text {
+                            text: parent.text
+                            color: parchment
+                            font.pixelSize: 13
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        padding: 10
+                    }
+
                     Text {
+                        Layout.fillWidth: true
                         text: backend.status
                         color: brass
                         font.pixelSize: 12
@@ -713,4 +849,6 @@ ApplicationWindow {
             }
         }
     }
+
+    Component.onCompleted: backend.refreshAccount()
 }

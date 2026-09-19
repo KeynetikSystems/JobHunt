@@ -4,20 +4,17 @@ Finds career opportunities and PE/VC/impact/consulting news (currently tuned for
 London), summarizes them with an LLM, and delivers them as a digest — by email, in a
 desktop app, or in a mobile app.
 
-Two desktop-app features are built but shipped as separate, independently buildable
-branches rather than merged into `main` yet, so each can be reviewed/released on its own:
-
-- **`feature/history-viewer`** — a History page recording every job/news item a scan
-  ever finds (not just what gets emailed), found-vs-emailed status, newest first.
-- **`feature/ai-application-materials`** — an AI-assisted "Draft CV highlights & cover
-  letter" button per job, grounded in a CV/background the user pastes into Settings.
+Both a History page (every job/news item ever emailed or dismissed) and AI-assisted
+"Draft CV highlights & cover letter" drafting are live on `main` in all three clients
+(desktop, mobile, backend) — these were originally built on separate feature branches,
+now merged.
 
 The project has four moving parts that all sit on top of one shared pipeline:
 
 | Surface | What it is | Where |
 |---|---|---|
 | Core pipeline | Search → summarize → dedupe → email/store | [`digest_engine.py`](digest_engine.py) |
-| Desktop app | Single-user PySide6/QML GUI, BYO API keys | [`main.py`](main.py), [`Main.qml`](Main.qml) |
+| Desktop app | PySide6/QML GUI, hosted keys (client of the backend) | [`main.py`](main.py), [`Main.qml`](Main.qml) |
 | Backend | Multi-user FastAPI service, hosted keys | [`backend/`](backend/) |
 | Mobile app | Flutter client for the backend | [`mobile_app/`](mobile_app/) |
 | Headless runner | Scheduled digest via GitHub Actions | [`.github/workflows/`](.github/workflows/) |
@@ -36,40 +33,38 @@ of this:
 3. **Dedupe** — once something is actually delivered (emailed, or marked seen via the
    backend's dismiss/send), its URL is written to `seen_items.json` so it never
    resurfaces.
-4. **Archive** *(`feature/history-viewer`)* — every run (including preview/dry-run
-   scans) is recorded to `history.json`, keyed by URL, with a `status` of `"found"` or
-   `"emailed"` — this backs the desktop History page and the mobile app's own History
-   tab.
-5. **Application materials** *(`feature/ai-application-materials`)* — given a chosen
-   opportunity and the user's own pasted-in CV/background (`cv.txt`), Groq drafts
-   tailored CV highlights and a full cover letter, grounded only in facts already
-   present in the CV (the prompt explicitly forbids inventing experience).
+4. **Archive** — every run is recorded to `history.json`, keyed by URL — this backs the
+   headless runner's own record-keeping. The backend keeps its own equivalent per-user
+   history in SQLite (`seen_items` table), which is what both desktop's and mobile's
+   History pages actually read from.
+5. **Application materials** — given a chosen opportunity and a CV/background, Groq
+   drafts tailored CV highlights and a full cover letter, grounded only in facts already
+   present in the CV (the prompt explicitly forbids inventing experience). The backend
+   exposes this as `/api/materials`, backed by each user's CV text stored in SQLite; the
+   headless runner has no equivalent (there's no interactive user to draft for).
 
 All local state (`seen_items.json`, `history.json`, `queries.json`, `cv.txt`, `.env`) is
-gitignored — it's per-installation data, not project source.
+gitignored — it's per-installation data, not project source. This local state is only
+actually used by whatever runs `digest_engine.py` in-process — the backend server (for
+the shared scan) and the headless runner. The desktop app no longer does; see below.
 
 ## Desktop app (JobHuntAI / "Ledger")
 
-A single-user, offline-first Windows/macOS app. Runs `digest_engine.py` in-process — no
-server involved — using API keys the user pastes into Settings themselves.
+A PySide6/QML GUI client of the backend — the same hosted-keys architecture the mobile
+app uses. It used to run `digest_engine.py` in-process with the user's own Tavily/Groq/
+SMTP keys; that mode was removed so desktop users share the operator's keys and the same
+free/premium caps as mobile, instead of being an unmetered, separate product. Connect to
+your backend from the Settings page (Backend URL + email) — no local `.env` editing
+needed for this anymore.
 
 ```bash
 pip install -r requirements-desktop.txt
-cp .env.example .env   # fill in TAVILY_API_KEY, GROQ_API_KEY, DIGEST_TO_EMAIL, SMTP_*
 python main.py
 ```
 
-`main` has the baseline Dashboard + Settings pages only. The two features below each
-live on their own branch on top of that baseline — check one out to build/run it:
-
-- **`feature/history-viewer`** — adds a History nav page listing every job/news item
-  ever found, found-vs-emailed status, newest first, via a new `HistoryCard.qml`.
-- **`feature/ai-application-materials`** — adds a "Your background / CV" field to
-  Settings and a "Draft CV highlights & cover letter" button to each Dashboard job
-  card, via a new `ApplicationMaterialsPanel.qml`.
-
-Each branch's [`.github/workflows/build-macos.yml`](.github/workflows/build-macos.yml)
-and `pyproject.toml` are updated to bundle that branch's own new QML file(s) only.
+Screens: Dashboard, History, Settings (connect/account/CV) — feature-equivalent to the
+mobile app, via [`Main.qml`](Main.qml), [`HistoryCard.qml`](HistoryCard.qml),
+[`ApplicationMaterialsPanel.qml`](ApplicationMaterialsPanel.qml).
 
 ## Backend (multi-user, hosted keys)
 
@@ -86,9 +81,6 @@ API key and never see those credentials directly.
 - **Auth**: one header, one lookup (`backend/auth.py`) — no signup flow or billing gate
   yet; `/api/register` just hands out a key.
 
-Routes: `GET /api/health`, `POST /api/register`, `POST /api/scan`, `POST /api/send`,
-`POST /api/dismiss`, `GET /api/history`.
-
 ```bash
 cd backend
 pip install -r requirements.txt
@@ -100,11 +92,16 @@ Deployed via [`Dockerfile`](Dockerfile) + [`railway.json`](railway.json) (Railwa
 Dockerfile builds from the repo root rather than `backend/` alone, because the backend
 imports `digest_engine.py`, `config.py`, and `send_report.py` from the parent directory.
 
-**Not yet built**: billing (Stripe), a real scheduler (the cache refreshes lazily on
-request rather than on a cron), per-user custom queries (everyone gets the shared
-default set), and an `/api/*` route for AI-assisted application materials (that feature
-only exists in `digest_engine.py`/the desktop app's `feature/ai-application-materials`
-branch — mobile/backend have no way to call it yet).
+**Not yet built**: billing (Stripe) — plan upgrades are still a manual review of
+`/api/upgrade-request` — and a real scheduler (the shared-scan cache refreshes lazily on
+request rather than on a cron). Per-user custom queries and AI-assisted application
+materials are both built (`/api/search`, `/api/materials`), each with its own daily cap
+on the free plan.
+
+Routes: `GET /api/health`, `POST /api/register`, `GET /api/verify`,
+`POST /api/resend-verification`, `POST /api/scan`, `POST /api/search`, `POST /api/send`,
+`POST /api/dismiss`, `GET /api/me`, `GET /api/history`, `GET/PUT /api/cv`,
+`POST /api/materials`, `GET/PUT /api/alerts`, `POST /api/upgrade-request`.
 
 ## Mobile app
 
@@ -154,12 +151,14 @@ reports/, docs/          Generated HTML digests / GitHub Pages archive (not hand
 
 Product direction discussed alongside this codebase, for whoever picks this up next:
 
-- **Free vs. premium split**: free = manual scans, fixed query set, capped history;
-  premium = scheduled auto-scans, unlimited custom queries/history, multi-channel
-  alerts, and AI-assisted application materials (the CV-highlights/cover-letter
-  feature on `feature/ai-application-materials`, desktop-only so far).
-- **BYO-key vs. hosted-key tension**: the desktop app is BYO-API-key (can't be metered
-  or monetized per-user); the backend already has the hosted-keys + per-user auth
-  needed to meter usage and gate features by plan — moving the desktop app onto the
-  backend (instead of calling `digest_engine.py` in-process) is the main blocker to
-  real tiering.
+- **Free vs. premium split**: free = manual scans, shared default query set, capped
+  custom searches/history/AI drafts; premium = scheduled auto-scans pushed via
+  Slack/Telegram, unlimited custom search, unlimited AI-assisted application materials,
+  and full history. AI-assisted application materials (CV highlights/cover letter) and
+  custom search are live on all three clients (desktop, mobile, backend), not
+  desktop-only or premium-only — the caps are what actually differ by plan.
+- ~~BYO-key vs. hosted-key tension~~ — resolved: the desktop app was migrated onto the
+  hosted backend (see [main.py](main.py)/[backend_client.py](backend_client.py)) instead
+  of calling `digest_engine.py` in-process, so it's metered and gated by plan exactly
+  like mobile now. What's still genuinely missing is real billing (Stripe/Paddle) to act
+  on that metering — plan upgrades are still a manual review of `/api/upgrade-request`.
