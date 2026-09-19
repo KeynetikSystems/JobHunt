@@ -10,5 +10,6 @@ reports/
 seen_items.json
 queries.json
 history.json
+cv.txt
 *.db
 .claude/

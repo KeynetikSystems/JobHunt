@@ -106,5 +106,10 @@ Rectangle {
             wrapMode: Text.WordWrap
             Layout.fillWidth: true
         }
+
+        ApplicationMaterialsPanel {
+            visible: card.kind === "job"
+            url: card.url
+        }
     }
 }
