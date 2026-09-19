@@ -33,7 +33,7 @@ ColumnLayout {
             ToolTip.visible: control.tooltip.length > 0 && hovered
             ToolTip.delay: 400
             background: Rectangle {
-                color: "#1C212C"
+                color: "#14181F"
                 border.color: "#2B3140"
                 border.width: 1
                 radius: 2

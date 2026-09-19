@@ -10,7 +10,6 @@ Rectangle {
     property string note: ""
     property string url: ""
     property string seenAt: ""
-    property string status: "found"
 
     readonly property color parchment: "#EDE7D9"
     readonly property color brass: "#B08D57"
@@ -62,20 +61,6 @@ Rectangle {
                 font.bold: true
             }
             Item { Layout.fillWidth: true }
-            Rectangle {
-                radius: 2
-                color: card.status === "emailed" ? Qt.rgba(brass.r, brass.g, brass.b, 0.15) : Qt.rgba(slate.r, slate.g, slate.b, 0.15)
-                implicitWidth: statusLabel.implicitWidth + 12
-                implicitHeight: statusLabel.implicitHeight + 4
-                Text {
-                    id: statusLabel
-                    anchors.centerIn: parent
-                    text: card.status === "emailed" ? "EMAILED" : "FOUND"
-                    color: card.status === "emailed" ? brass : slate
-                    font.pixelSize: 9
-                    font.bold: true
-                }
-            }
             Text {
                 text: card.seenAt
                 color: slate
