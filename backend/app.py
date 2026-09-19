@@ -26,16 +26,19 @@ Run locally:
     uvicorn app:app --reload
 Then open http://127.0.0.1:8000/docs for interactive testing.
 """
+import smtplib
 import sys
 import threading
 import time
+from email.mime.text import MIMEText
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import digest_engine  # noqa: E402
 
-from fastapi import Depends, FastAPI, HTTPException  # noqa: E402
+from fastapi import Depends, FastAPI, HTTPException, Request  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.responses import HTMLResponse  # noqa: E402
 from pydantic import BaseModel, EmailStr  # noqa: E402
 
 import alerts  # noqa: E402
@@ -214,6 +217,7 @@ class MaterialsResponse(BaseModel):
 
 class MeResponse(BaseModel):
     email: str
+    email_verified: bool
     plan: str
     materials_used_today: int
     materials_daily_cap: int | None  # null = unlimited (premium)
@@ -235,6 +239,32 @@ class UpgradeRequestBody(BaseModel):
 
 class UpgradeRequestResponse(BaseModel):
     status: str
+
+
+def _send_verification_email(to_addr: str, verify_url: str) -> None:
+    """Best-effort — registration still succeeds if this fails (a transient SMTP
+    hiccup shouldn't lock someone out of retrying), but the account stays
+    unverified until POST /api/resend-verification is called."""
+    env = digest_engine.load_env()
+    smtp_host = env.get("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(env.get("SMTP_PORT", "587"))
+    smtp_user = env.get("SMTP_USER")
+    smtp_pass = env.get("SMTP_PASS")
+    if not smtp_user or not smtp_pass:
+        raise RuntimeError("SMTP_USER and SMTP_PASS must be set in the server's .env")
+
+    msg = MIMEText(
+        f"Confirm this is your email address to activate your JobHuntAI account:\n\n{verify_url}\n\n"
+        "If you didn't request this, ignore this email."
+    )
+    msg["Subject"] = "Verify your email — JobHuntAI"
+    msg["From"] = smtp_user
+    msg["To"] = to_addr
+
+    with smtplib.SMTP(smtp_host, smtp_port) as server:
+        server.starttls()
+        server.login(smtp_user, smtp_pass)
+        server.send_message(msg)
 
 
 def _mark_seen(user_id: int, jobs: list, news: list) -> None:
@@ -273,28 +303,92 @@ def _mark_seen(user_id: int, jobs: list, news: list) -> None:
 
 # -- routes -------------------------------------------------------------------
 
+def _serve_legal_doc(filename: str) -> HTMLResponse:
+    path = Path(__file__).parent.parent / filename
+    text = path.read_text(encoding="utf-8") if path.exists() else f"{filename} not found."
+    escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    html = (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+        "<style>body{font-family:sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem;"
+        "line-height:1.5;white-space:pre-wrap}</style></head>"
+        f"<body>{escaped}</body></html>"
+    )
+    return HTMLResponse(html)
+
+
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy():
+    return _serve_legal_doc("PRIVACY.md")
+
+
+@app.get("/terms", response_class=HTMLResponse)
+def terms():
+    return _serve_legal_doc("TERMS.md")
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
 
 
 @app.post("/api/register", response_model=RegisterResponse)
-def register(body: RegisterRequest):
+def register(body: RegisterRequest, request: Request):
+    """Issues an API key immediately, but it's inert (require_verified_user rejects
+    it) until the recipient clicks the link this sends — otherwise anyone could
+    register under an address they don't own to dodge free-tier caps with disposable
+    accounts, or have digests emailed to someone who never asked for them."""
     api_key = auth.generate_api_key()
+    verify_token = auth.generate_verify_token()
     with db.get_db() as conn:
-        conn.execute("INSERT INTO users (api_key, email) VALUES (?, ?)", (api_key, body.email))
+        conn.execute(
+            "INSERT INTO users (api_key, email, verify_token) VALUES (?, ?, ?)",
+            (api_key, body.email, verify_token),
+        )
+    verify_url = f"{str(request.base_url).rstrip('/')}/api/verify?token={verify_token}"
+    try:
+        _send_verification_email(body.email, verify_url)
+    except Exception as e:
+        print(f"Verification email failed for {body.email}: {e}")
     return RegisterResponse(api_key=api_key)
 
 
+@app.get("/api/verify", response_class=HTMLResponse)
+def verify(token: str):
+    with db.get_db() as conn:
+        row = conn.execute("SELECT * FROM users WHERE verify_token = ?", (token,)).fetchone()
+        if not row:
+            return HTMLResponse("<p>That verification link is invalid or has already been used.</p>", status_code=400)
+        conn.execute(
+            "UPDATE users SET email_verified = 1, verify_token = NULL WHERE id = ?", (row["id"],)
+        )
+    return HTMLResponse("<p>Email verified — you can go back to the app now.</p>")
+
+
+@app.post("/api/resend-verification")
+def resend_verification(request: Request, user: dict = Depends(auth.require_user)):
+    if user["email_verified"]:
+        return {"status": "already_verified"}
+    verify_token = auth.generate_verify_token()
+    with db.get_db() as conn:
+        conn.execute("UPDATE users SET verify_token = ? WHERE id = ?", (verify_token, user["id"]))
+    verify_url = f"{str(request.base_url).rstrip('/')}/api/verify?token={verify_token}"
+    try:
+        _send_verification_email(user["email"], verify_url)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Couldn't send the email: {e}")
+    return {"status": "sent"}
+
+
 @app.post("/api/scan", response_model=ScanResponse)
-def scan(user: dict = Depends(auth.require_user)):
+def scan(user: dict = Depends(auth.require_verified_user)):
     jobs, news = _get_shared_results()
     new_jobs, new_news = _new_items_for_user(user["id"], jobs, news)
     return ScanResponse(jobs=new_jobs, news=new_news)
 
 
 @app.post("/api/send")
-def send(body: SendRequest, user: dict = Depends(auth.require_user)):
+def send(body: SendRequest, user: dict = Depends(auth.require_verified_user)):
     try:
         digest_engine.finalize_and_send(body.jobs, body.news, log=print, to_addr=user["email"])
     except Exception as e:
@@ -305,7 +399,7 @@ def send(body: SendRequest, user: dict = Depends(auth.require_user)):
 
 
 @app.post("/api/dismiss")
-def dismiss(body: DismissRequest, user: dict = Depends(auth.require_user)):
+def dismiss(body: DismissRequest, user: dict = Depends(auth.require_verified_user)):
     """Marks items seen without emailing — the in-app equivalent of /api/send's seen-marking,
     for clients (mobile) that show results directly instead of delivering them by email."""
     _mark_seen(user["id"], body.jobs, body.news)
@@ -319,6 +413,7 @@ def me(user: dict = Depends(auth.require_user)):
     is_premium = user["plan"] == "premium"
     return MeResponse(
         email=user["email"],
+        email_verified=bool(user["email_verified"]),
         plan=user["plan"],
         materials_used_today=_usage_count_today(user["id"], "materials"),
         materials_daily_cap=None if is_premium else FREE_MATERIALS_DAILY_CAP,
@@ -326,7 +421,7 @@ def me(user: dict = Depends(auth.require_user)):
 
 
 @app.get("/api/history", response_model=HistoryResponse)
-def history(user: dict = Depends(auth.require_user)):
+def history(user: dict = Depends(auth.require_verified_user)):
     """Everything this user has previously seen (sent or dismissed), newest first —
     backs the mobile app's History tab. Free plan sees the last FREE_HISTORY_DAYS
     days only; premium sees everything (still capped at 200 rows per response)."""
@@ -342,21 +437,21 @@ def history(user: dict = Depends(auth.require_user)):
 
 
 @app.get("/api/cv", response_model=CvResponse)
-def get_cv(user: dict = Depends(auth.require_user)):
+def get_cv(user: dict = Depends(auth.require_verified_user)):
     """The user's own background/experience, saved once here so mobile doesn't resend
     it on every /api/materials call — mirrors the desktop app's cv.txt."""
     return CvResponse(cv_text=user["cv_text"])
 
 
 @app.put("/api/cv", response_model=CvResponse)
-def put_cv(body: CvRequest, user: dict = Depends(auth.require_user)):
+def put_cv(body: CvRequest, user: dict = Depends(auth.require_verified_user)):
     with db.get_db() as conn:
         conn.execute("UPDATE users SET cv_text = ? WHERE id = ?", (body.cv_text, user["id"]))
     return CvResponse(cv_text=body.cv_text)
 
 
 @app.post("/api/materials", response_model=MaterialsResponse)
-def materials(body: MaterialsRequest, user: dict = Depends(auth.require_user)):
+def materials(body: MaterialsRequest, user: dict = Depends(auth.require_verified_user)):
     """Tailored CV highlights + a cover letter for one job, using this user's saved CV
     and the server's own Groq key — the mobile equivalent of the desktop app's
     "Draft CV highlights & cover letter" button. Free plan is capped per day since
@@ -382,12 +477,12 @@ def materials(body: MaterialsRequest, user: dict = Depends(auth.require_user)):
 
 
 @app.get("/api/alerts", response_model=AlertsResponse)
-def get_alerts(user: dict = Depends(auth.require_user)):
+def get_alerts(user: dict = Depends(auth.require_verified_user)):
     return AlertsResponse(slack_webhook_url=user["slack_webhook_url"], telegram_chat_id=user["telegram_chat_id"])
 
 
 @app.put("/api/alerts", response_model=AlertsResponse)
-def put_alerts(body: AlertsRequest, user: dict = Depends(auth.require_user)):
+def put_alerts(body: AlertsRequest, user: dict = Depends(auth.require_verified_user)):
     """Configures where scheduled-scan alerts get pushed. Premium only — free-plan
     users still get new items, just by pulling /api/scan themselves."""
     if user["plan"] != "premium":
@@ -404,7 +499,7 @@ def put_alerts(body: AlertsRequest, user: dict = Depends(auth.require_user)):
 
 
 @app.post("/api/upgrade-request", response_model=UpgradeRequestResponse)
-def upgrade_request(body: UpgradeRequestBody, user: dict = Depends(auth.require_user)):
+def upgrade_request(body: UpgradeRequestBody, user: dict = Depends(auth.require_verified_user)):
     """Captures interest in premium instead of building real billing before there's
     evidence anyone wants it — reviewed by hand, then the plan is flipped manually."""
     with db.get_db() as conn:

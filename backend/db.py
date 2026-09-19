@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     api_key TEXT UNIQUE NOT NULL,
     email TEXT NOT NULL,
+    email_verified INTEGER NOT NULL DEFAULT 0,
+    verify_token TEXT,
     cv_text TEXT NOT NULL DEFAULT '',
     plan TEXT NOT NULL DEFAULT 'free',
     slack_webhook_url TEXT NOT NULL DEFAULT '',
@@ -79,6 +81,11 @@ _USERS_MIGRATIONS = [
     ("plan", "TEXT NOT NULL DEFAULT 'free'"),
     ("slack_webhook_url", "TEXT NOT NULL DEFAULT ''"),
     ("telegram_chat_id", "TEXT NOT NULL DEFAULT ''"),
+    # Existing accounts predate verification and can't retroactively prove
+    # ownership — grandfathered in as verified. Fresh installs (SCHEMA above)
+    # default new users to 0, requiring verification from day one.
+    ("email_verified", "INTEGER NOT NULL DEFAULT 1"),
+    ("verify_token", "TEXT"),
 ]
 
 
