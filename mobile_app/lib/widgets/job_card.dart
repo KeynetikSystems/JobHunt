@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/job_listing.dart';
 import '../theme.dart';
+import 'application_materials_panel.dart';
 
 class JobCard extends StatelessWidget {
   final JobListing job;
@@ -50,6 +51,13 @@ class JobCard extends StatelessWidget {
                         job.note,
                         style: const TextStyle(color: LedgerColors.slate, fontSize: 12),
                       ),
+                      ApplicationMaterialsPanel(job: {
+                        'title': job.title,
+                        'firm': job.firm,
+                        'seniority': job.seniority,
+                        'note': job.note,
+                        'url': job.url,
+                      }),
                     ],
                   ),
                 ),

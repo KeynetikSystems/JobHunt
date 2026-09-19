@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/history_item.dart';
 import '../theme.dart';
+import 'application_materials_panel.dart';
 
 const _months = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -79,6 +80,14 @@ class HistoryCard extends StatelessWidget {
                         body,
                         style: const TextStyle(color: LedgerColors.slate, fontSize: 12),
                       ),
+                      if (item.isJob)
+                        ApplicationMaterialsPanel(job: {
+                          'title': item.title,
+                          'firm': item.firm,
+                          'seniority': item.seniority,
+                          'note': item.note,
+                          'url': item.url,
+                        }),
                     ],
                   ),
                 ),

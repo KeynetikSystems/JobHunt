@@ -144,6 +144,46 @@ class ApiClient {
         .toList();
   }
 
+  Future<String> getCv() async {
+    _requireConnected();
+    final res = await http.get(Uri.parse('$baseUrl/api/cv'), headers: _authHeaders);
+    if (res.statusCode != 200) {
+      throw Exception('Fetching CV failed (${res.statusCode}): ${res.body}');
+    }
+    return (jsonDecode(res.body) as Map<String, dynamic>)['cv_text'] as String? ?? '';
+  }
+
+  Future<void> saveCv(String cvText) async {
+    _requireConnected();
+    final res = await http.put(
+      Uri.parse('$baseUrl/api/cv'),
+      headers: _authHeaders,
+      body: jsonEncode({'cv_text': cvText}),
+    );
+    if (res.statusCode != 200) {
+      throw Exception('Saving CV failed (${res.statusCode}): ${res.body}');
+    }
+  }
+
+  /// Drafts CV highlights + a cover letter for one job, using the CV saved via
+  /// saveCv() and the backend's own Groq key. Returns (cvHighlights, coverLetter).
+  /// Takes a plain map (title/firm/seniority/note/url) so both a JobListing and a
+  /// job-kind HistoryItem can call this without an extra conversion type.
+  Future<(String, String)> draftMaterials(Map<String, String> job) async {
+    _requireConnected();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/materials'),
+      headers: _authHeaders,
+      body: jsonEncode({'job': job}),
+    );
+    if (res.statusCode != 200) {
+      final detail = (jsonDecode(res.body) as Map<String, dynamic>)['detail'] ?? res.body;
+      throw Exception('$detail');
+    }
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    return (data['cv_highlights'] as String? ?? '', data['cover_letter'] as String? ?? '');
+  }
+
   void _requireConnected() {
     if (!isConnected) {
       throw Exception('Not connected — set your backend URL in Settings first.');

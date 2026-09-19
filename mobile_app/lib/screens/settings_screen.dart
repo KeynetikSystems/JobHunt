@@ -13,8 +13,11 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final _urlCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
+  final _cvCtrl = TextEditingController();
   bool _busy = false;
+  bool _cvBusy = false;
   String _status = '';
+  String _cvStatus = '';
 
   @override
   void initState() {
@@ -22,12 +25,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final api = ApiClient.instance;
     _urlCtrl.text = api.baseUrl ?? '';
     _emailCtrl.text = api.email ?? '';
+    if (api.isConnected) _loadCv();
+  }
+
+  Future<void> _loadCv() async {
+    try {
+      final cv = await ApiClient.instance.getCv();
+      if (mounted) setState(() => _cvCtrl.text = cv);
+    } catch (_) {
+      // Not fatal — the field just starts empty; saving will still work.
+    }
+  }
+
+  Future<void> _saveCv() async {
+    setState(() {
+      _cvBusy = true;
+      _cvStatus = 'Saving…';
+    });
+    try {
+      await ApiClient.instance.saveCv(_cvCtrl.text);
+      if (mounted) setState(() => _cvStatus = 'CV saved.');
+    } catch (e) {
+      if (mounted) setState(() => _cvStatus = 'Save failed: $e');
+    } finally {
+      if (mounted) setState(() => _cvBusy = false);
+    }
   }
 
   @override
   void dispose() {
     _urlCtrl.dispose();
     _emailCtrl.dispose();
+    _cvCtrl.dispose();
     super.dispose();
   }
 
@@ -40,6 +69,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await ApiClient.instance.register(_urlCtrl.text.trim(), _emailCtrl.text.trim());
       setState(() => _status = 'Connected as ${_emailCtrl.text.trim()}.');
       widget.onConnectionChanged();
+      await _loadCv();
     } catch (e) {
       setState(() => _status = 'Connection failed: $e');
     } finally {
@@ -52,7 +82,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _urlCtrl.clear();
       _emailCtrl.clear();
+      _cvCtrl.clear();
       _status = 'Disconnected.';
+      _cvStatus = '';
     });
     widget.onConnectionChanged();
   }
@@ -120,6 +152,61 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     'API key it gives back.',
                     style: TextStyle(color: LedgerColors.slate, fontSize: 11, fontStyle: FontStyle.italic),
                   ),
+                  if (connected) ...[
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Your background / CV',
+                      style: TextStyle(color: LedgerColors.parchment, fontFamily: 'Georgia', fontSize: 16),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Paste your CV or a summary of your experience — used to draft tailored '
+                      'CV highlights and cover letters for opportunities you choose to apply to.',
+                      style: TextStyle(color: LedgerColors.slate, fontSize: 11),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _cvCtrl,
+                      maxLines: 8,
+                      style: const TextStyle(color: LedgerColors.parchment, fontSize: 12, fontFamily: 'monospace'),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        contentPadding: const EdgeInsets.all(10),
+                        filled: true,
+                        fillColor: LedgerColors.inkPanel,
+                        border: OutlineInputBorder(
+                          borderSide: const BorderSide(color: LedgerColors.hairline),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: const BorderSide(color: LedgerColors.hairline),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: const BorderSide(color: LedgerColors.brass),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        OutlinedButton(
+                          onPressed: _cvBusy ? null : _saveCv,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: LedgerColors.brass,
+                            side: const BorderSide(color: LedgerColors.brass),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                          ),
+                          child: Text(_cvBusy ? 'Saving…' : 'Save CV'),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(_cvStatus, style: const TextStyle(color: LedgerColors.brass, fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
