@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../api_client.dart';
+import '../models/account_status.dart';
 import '../theme.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -14,10 +16,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _urlCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _cvCtrl = TextEditingController();
+  final _upgradeNoteCtrl = TextEditingController();
+  final _slackCtrl = TextEditingController();
+  final _telegramCtrl = TextEditingController();
   bool _busy = false;
   bool _cvBusy = false;
+  bool _accountBusy = false;
+  bool _alertsBusy = false;
   String _status = '';
   String _cvStatus = '';
+  String _accountStatus = '';
+  String _alertsStatus = '';
+  AccountStatus? _account;
 
   @override
   void initState() {
@@ -25,7 +35,80 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final api = ApiClient.instance;
     _urlCtrl.text = api.baseUrl ?? '';
     _emailCtrl.text = api.email ?? '';
-    if (api.isConnected) _loadCv();
+    if (api.isConnected) {
+      _loadCv();
+      _loadAccount();
+    }
+  }
+
+  Future<void> _loadAccount() async {
+    try {
+      final account = await ApiClient.instance.me();
+      if (!mounted) return;
+      setState(() => _account = account);
+      if (account.isPremium) {
+        final (slack, telegram) = await ApiClient.instance.getAlerts();
+        if (mounted) {
+          setState(() {
+            _slackCtrl.text = slack;
+            _telegramCtrl.text = telegram;
+          });
+        }
+      }
+    } catch (_) {
+      // Not fatal — the Account section just won't show until this succeeds.
+    }
+  }
+
+  Future<void> _resendVerification() async {
+    setState(() {
+      _accountBusy = true;
+      _accountStatus = 'Sending…';
+    });
+    try {
+      await ApiClient.instance.resendVerification();
+      if (mounted) setState(() => _accountStatus = 'Verification email sent — check your inbox.');
+    } catch (e) {
+      if (mounted) setState(() => _accountStatus = 'Failed: $e');
+    } finally {
+      if (mounted) setState(() => _accountBusy = false);
+    }
+  }
+
+  Future<void> _requestUpgrade() async {
+    setState(() {
+      _accountBusy = true;
+      _accountStatus = 'Sending…';
+    });
+    try {
+      await ApiClient.instance.requestUpgrade(_upgradeNoteCtrl.text);
+      if (mounted) {
+        setState(() => _accountStatus = "Request sent — we'll follow up by email.");
+        _upgradeNoteCtrl.clear();
+      }
+    } catch (e) {
+      if (mounted) setState(() => _accountStatus = 'Failed: $e');
+    } finally {
+      if (mounted) setState(() => _accountBusy = false);
+    }
+  }
+
+  Future<void> _saveAlerts() async {
+    setState(() {
+      _alertsBusy = true;
+      _alertsStatus = 'Saving…';
+    });
+    try {
+      await ApiClient.instance.saveAlerts(
+        slackWebhookUrl: _slackCtrl.text.trim(),
+        telegramChatId: _telegramCtrl.text.trim(),
+      );
+      if (mounted) setState(() => _alertsStatus = 'Alert settings saved.');
+    } catch (e) {
+      if (mounted) setState(() => _alertsStatus = 'Save failed: $e');
+    } finally {
+      if (mounted) setState(() => _alertsBusy = false);
+    }
   }
 
   Future<void> _loadCv() async {
@@ -57,6 +140,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _urlCtrl.dispose();
     _emailCtrl.dispose();
     _cvCtrl.dispose();
+    _upgradeNoteCtrl.dispose();
+    _slackCtrl.dispose();
+    _telegramCtrl.dispose();
     super.dispose();
   }
 
@@ -67,9 +153,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     try {
       await ApiClient.instance.register(_urlCtrl.text.trim(), _emailCtrl.text.trim());
-      setState(() => _status = 'Connected as ${_emailCtrl.text.trim()}.');
+      setState(() => _status =
+          'Connected as ${_emailCtrl.text.trim()}. Check your email to verify your account.');
       widget.onConnectionChanged();
       await _loadCv();
+      await _loadAccount();
     } catch (e) {
       setState(() => _status = 'Connection failed: $e');
     } finally {
@@ -83,10 +171,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _urlCtrl.clear();
       _emailCtrl.clear();
       _cvCtrl.clear();
+      _slackCtrl.clear();
+      _telegramCtrl.clear();
+      _upgradeNoteCtrl.clear();
       _status = 'Disconnected.';
       _cvStatus = '';
+      _accountStatus = '';
+      _alertsStatus = '';
+      _account = null;
     });
     widget.onConnectionChanged();
+  }
+
+  Future<void> _openLegalDoc(String path) async {
+    final url = Uri.parse('${ApiClient.instance.baseUrl}$path');
+    launchUrl(url, mode: LaunchMode.externalApplication);
   }
 
   @override
@@ -137,6 +236,100 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ],
                     ),
                   ),
+                  if (connected && _account != null) ...[
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Account',
+                      style: TextStyle(color: LedgerColors.parchment, fontFamily: 'Georgia', fontSize: 16),
+                    ),
+                    const SizedBox(height: 10),
+                    _accountRow('Plan', _account!.isPremium ? 'Premium' : 'Free'),
+                    _accountRow('Email verified', _account!.emailVerified ? 'Yes' : 'No'),
+                    _accountRow(
+                      'AI drafts today',
+                      _account!.materialsDailyCap == null
+                          ? '${_account!.materialsUsedToday} (unlimited)'
+                          : '${_account!.materialsUsedToday} / ${_account!.materialsDailyCap}',
+                    ),
+                    if (!_account!.emailVerified) ...[
+                      const SizedBox(height: 8),
+                      OutlinedButton(
+                        onPressed: _accountBusy ? null : _resendVerification,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: LedgerColors.brass,
+                          side: const BorderSide(color: LedgerColors.brass),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                        ),
+                        child: const Text('Resend verification email'),
+                      ),
+                    ],
+                    if (!_account!.isPremium) ...[
+                      const SizedBox(height: 12),
+                      _field('Request an upgrade (optional note)', _upgradeNoteCtrl,
+                          hint: "e.g. I'm hitting the daily draft limit"),
+                      OutlinedButton(
+                        onPressed: _accountBusy ? null : _requestUpgrade,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: LedgerColors.brass,
+                          side: const BorderSide(color: LedgerColors.brass),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                        ),
+                        child: const Text('Request upgrade'),
+                      ),
+                    ],
+                    if (_account!.isPremium) ...[
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Alert channels',
+                        style: TextStyle(color: LedgerColors.parchment, fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        "Get new opportunities pushed automatically instead of pulling a scan yourself.",
+                        style: TextStyle(color: LedgerColors.slate, fontSize: 11),
+                      ),
+                      const SizedBox(height: 8),
+                      _field('Slack webhook URL', _slackCtrl, hint: 'https://hooks.slack.com/services/...'),
+                      _field('Telegram chat ID', _telegramCtrl, hint: '123456789'),
+                      Row(
+                        children: [
+                          OutlinedButton(
+                            onPressed: _alertsBusy ? null : _saveAlerts,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: LedgerColors.brass,
+                              side: const BorderSide(color: LedgerColors.brass),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                            ),
+                            child: Text(_alertsBusy ? 'Saving…' : 'Save alert settings'),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(_alertsStatus, style: const TextStyle(color: LedgerColors.brass, fontSize: 12)),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (_accountStatus.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(_accountStatus, style: const TextStyle(color: LedgerColors.brass, fontSize: 12)),
+                    ],
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        TextButton(
+                          onPressed: () => _openLegalDoc('/privacy'),
+                          style: TextButton.styleFrom(foregroundColor: LedgerColors.slate, padding: EdgeInsets.zero),
+                          child: const Text('Privacy Policy', style: TextStyle(fontSize: 11)),
+                        ),
+                        const SizedBox(width: 16),
+                        TextButton(
+                          onPressed: () => _openLegalDoc('/terms'),
+                          style: TextButton.styleFrom(foregroundColor: LedgerColors.slate, padding: EdgeInsets.zero),
+                          child: const Text('Terms of Service', style: TextStyle(fontSize: 11)),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 20),
                   const Text(
                     'Backend',
@@ -244,6 +437,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _accountRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(label, style: const TextStyle(color: LedgerColors.slate, fontSize: 12)),
+          ),
+          Text(value, style: const TextStyle(color: LedgerColors.parchment, fontSize: 12, fontWeight: FontWeight.bold)),
+        ],
       ),
     );
   }

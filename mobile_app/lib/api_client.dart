@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'models/account_status.dart';
 import 'models/history_item.dart';
 import 'models/job_listing.dart';
 import 'models/news_item.dart';
@@ -182,6 +183,68 @@ class ApiClient {
     }
     final data = jsonDecode(res.body) as Map<String, dynamic>;
     return (data['cv_highlights'] as String? ?? '', data['cover_letter'] as String? ?? '');
+  }
+
+  Future<AccountStatus> me() async {
+    _requireConnected();
+    final res = await http.get(Uri.parse('$baseUrl/api/me'), headers: _authHeaders);
+    if (res.statusCode != 200) {
+      throw Exception(_errorDetail(res));
+    }
+    return AccountStatus.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+  }
+
+  Future<void> resendVerification() async {
+    _requireConnected();
+    final res = await http.post(Uri.parse('$baseUrl/api/resend-verification'), headers: _authHeaders);
+    if (res.statusCode != 200) {
+      throw Exception(_errorDetail(res));
+    }
+  }
+
+  Future<void> requestUpgrade(String note) async {
+    _requireConnected();
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/upgrade-request'),
+      headers: _authHeaders,
+      body: jsonEncode({'note': note}),
+    );
+    if (res.statusCode != 200) {
+      throw Exception(_errorDetail(res));
+    }
+  }
+
+  /// Returns (slackWebhookUrl, telegramChatId).
+  Future<(String, String)> getAlerts() async {
+    _requireConnected();
+    final res = await http.get(Uri.parse('$baseUrl/api/alerts'), headers: _authHeaders);
+    if (res.statusCode != 200) {
+      throw Exception(_errorDetail(res));
+    }
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    return (data['slack_webhook_url'] as String? ?? '', data['telegram_chat_id'] as String? ?? '');
+  }
+
+  Future<void> saveAlerts({required String slackWebhookUrl, required String telegramChatId}) async {
+    _requireConnected();
+    final res = await http.put(
+      Uri.parse('$baseUrl/api/alerts'),
+      headers: _authHeaders,
+      body: jsonEncode({'slack_webhook_url': slackWebhookUrl, 'telegram_chat_id': telegramChatId}),
+    );
+    if (res.statusCode != 200) {
+      throw Exception(_errorDetail(res));
+    }
+  }
+
+  String _errorDetail(http.Response res) {
+    try {
+      final detail = (jsonDecode(res.body) as Map<String, dynamic>)['detail'];
+      if (detail != null) return '$detail';
+    } catch (_) {
+      // Body wasn't JSON — fall through to the raw body below.
+    }
+    return res.body;
   }
 
   void _requireConnected() {

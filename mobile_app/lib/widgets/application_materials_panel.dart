@@ -71,6 +71,14 @@ class _ApplicationMaterialsPanelState extends State<ApplicationMaterialsPanel> {
         if (_error != null) ...[
           const SizedBox(height: 6),
           Text(_error!, style: const TextStyle(color: Colors.redAccent, fontSize: 11)),
+          if (_error!.contains('Daily limit'))
+            const Padding(
+              padding: EdgeInsets.only(top: 2),
+              child: Text(
+                'Go to Settings > Account to request an upgrade.',
+                style: TextStyle(color: LedgerColors.slate, fontSize: 11, fontStyle: FontStyle.italic),
+              ),
+            ),
         ],
         if (hasResult) ...[
           const SizedBox(height: 10),
