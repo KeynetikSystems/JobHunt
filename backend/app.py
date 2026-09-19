@@ -70,6 +70,7 @@ CACHE_TTL_SECONDS = 3600
 # paid outside the app. These caps exist purely to bound cost (Groq calls, response
 # size) while that manual process is in place, not as a monetization mechanism.
 FREE_MATERIALS_DAILY_CAP = 5
+FREE_SEARCH_DAILY_CAP = 10
 FREE_HISTORY_DAYS = 30
 
 
@@ -169,6 +170,10 @@ class RegisterResponse(BaseModel):
 class ScanResponse(BaseModel):
     jobs: list
     news: list
+
+
+class SearchRequest(BaseModel):
+    query: str
 
 
 class SendRequest(BaseModel):
@@ -383,6 +388,34 @@ def resend_verification(request: Request, user: dict = Depends(auth.require_user
 @app.post("/api/scan", response_model=ScanResponse)
 def scan(user: dict = Depends(auth.require_verified_user)):
     jobs, news = _get_shared_results()
+    new_jobs, new_news = _new_items_for_user(user["id"], jobs, news)
+    return ScanResponse(jobs=new_jobs, news=new_news)
+
+
+@app.post("/api/search", response_model=ScanResponse)
+def search(body: SearchRequest, user: dict = Depends(auth.require_verified_user)):
+    """Runs a live, user-supplied search — the mobile app's replacement for a plain "run
+    scan now" button. Unlike /api/scan this bypasses the shared cache and costs a real
+    Tavily+Groq call per request, so it's capped on the free plan the same way /api/materials
+    is; premium is unlimited."""
+    query = body.query.strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Enter a search query.")
+    if user["plan"] != "premium":
+        used = _usage_count_today(user["id"], "search")
+        if used >= FREE_SEARCH_DAILY_CAP:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Daily limit of {FREE_SEARCH_DAILY_CAP} searches reached on the free plan. Try again tomorrow.",
+            )
+    env = digest_engine.load_env()
+    if not env.get("TAVILY_API_KEY") or not env.get("GROQ_API_KEY"):
+        raise HTTPException(status_code=500, detail="Server is missing TAVILY_API_KEY/GROQ_API_KEY in its own .env")
+    try:
+        jobs, news = digest_engine.search_custom_query(query, env, log=print)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    _log_usage(user["id"], "search")
     new_jobs, new_news = _new_items_for_user(user["id"], jobs, news)
     return ScanResponse(jobs=new_jobs, news=new_news)
 

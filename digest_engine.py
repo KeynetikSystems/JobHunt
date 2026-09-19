@@ -129,6 +129,31 @@ Respond with ONLY a JSON object in this exact shape, nothing else:
 If nothing qualifies, respond with: {{"items": []}}
 """
 
+CUSTOM_SEARCH_PROMPT = """A user searched for exactly this: "{query}"
+
+Raw web search results (JSON array of title/url/content):
+{raw_json}
+
+From these, select only results genuinely relevant to that search (ignore \
+generic landing/browse pages and anything not actually related). Classify \
+each relevant result as either:
+- a job listing (an actual job posting or clear hiring signal) — extract \
+title, firm (the hiring company/organization), seniority (one of \
+"Graduate/Intern", "Analyst/Junior", "Associate/Mid", "Manager/Senior", \
+"Director/Partner+", or "Unspecified" if it can't be determined), and a \
+concise one-line note explaining the role and its relevance.
+- a news/informational item (an article, announcement, or anything else \
+genuinely relevant that isn't a job posting) — extract headline, source \
+(the publisher/site), and a 2-3 sentence summary in your own words.
+
+Do not invent anything not present in the search results.
+
+Respond with ONLY a JSON object in this exact shape, nothing else:
+{{"jobs": [{{"title": "...", "firm": "...", "seniority": "...", "note": "...", "url": "..."}}], \
+"news": [{{"headline": "...", "source": "...", "summary": "...", "url": "..."}}]}}
+If nothing qualifies, respond with: {{"jobs": [], "news": []}}
+"""
+
 
 APPLICATION_MATERIALS_PROMPT = """You are helping a job seeker tailor their application to one \
 specific role. Use ONLY the real background below — do not invent employers, titles, dates, \
@@ -351,21 +376,28 @@ def gather_and_filter(queries: list, api_key: str, seen: dict, topic: str, days:
 MAX_RESULTS_PER_SUMMARY = 25  # keeps requests under Groq free-tier TPM limits
 
 
-def _summarize_with_shrink(prompt_template: str, raw_results: list, groq_key: str, groq_model: str, log,
-                            max_results: int = MAX_RESULTS_PER_SUMMARY) -> list:
-    """Summarizes via Groq. If the payload trips the free-tier tokens-per-minute cap (HTTP 413),
-    halves the input and retries — a couple of times if needed — instead of failing the whole run."""
+def _groq_with_shrink(prompt_template: str, raw_results: list, groq_key: str, groq_model: str, log,
+                       max_results: int = MAX_RESULTS_PER_SUMMARY, **format_kwargs) -> dict:
+    """Calls Groq with prompt_template.format(raw_json=..., **format_kwargs). If the payload trips
+    the free-tier tokens-per-minute cap (HTTP 413), halves the input and retries — a couple of
+    times if needed — instead of failing the whole run."""
     results = raw_results[:max_results]
     for _ in range(3):
         try:
-            return groq_complete(prompt_template.format(raw_json=json.dumps(results)), groq_key, groq_model).get("items", [])
+            prompt = prompt_template.format(raw_json=json.dumps(results), **format_kwargs)
+            return groq_complete(prompt, groq_key, groq_model)
         except RuntimeError as e:
             if "HTTP 413" in str(e) and len(results) > 4:
                 log(f"  payload too large for Groq's rate limit — retrying with fewer results ({len(results)} -> {len(results)//2})")
                 results = results[:len(results) // 2]
                 continue
             raise
-    return []
+    return {}
+
+
+def _summarize_with_shrink(prompt_template: str, raw_results: list, groq_key: str, groq_model: str, log,
+                            max_results: int = MAX_RESULTS_PER_SUMMARY) -> list:
+    return _groq_with_shrink(prompt_template, raw_results, groq_key, groq_model, log, max_results).get("items", [])
 
 
 def build_html(jobs: list, news: list) -> str:
@@ -457,6 +489,25 @@ def collect_jobs_and_news(env: dict, seen: dict, log) -> tuple[list, list]:
     log(f"  {len(news)} news items selected")
 
     return jobs, news
+
+
+def search_custom_query(query: str, env: dict, log=lambda m: None) -> tuple[list, list]:
+    """Runs one ad-hoc user-supplied search, outside the shared scan cache/default query
+    set — powers the mobile app's and the backend-hosted desktop app's search box. A single
+    Tavily call plus a single Groq call, so unlike collect_jobs_and_news this costs real API
+    usage per invocation, capped server-side (see FREE_SEARCH_DAILY_CAP in backend/app.py).
+
+    Results are classified into the same job/news shapes the dashboard already renders,
+    since a free-text query might turn up either (or both)."""
+    tavily_key = env.get("TAVILY_API_KEY")
+    groq_key = env.get("GROQ_API_KEY")
+    groq_model = env.get("GROQ_MODEL") or DEFAULT_GROQ_MODEL
+
+    raw = gather_and_filter([query], tavily_key, seen={}, topic="general", days=None, log=log, max_results=10)
+    if not raw:
+        return [], []
+    result = _groq_with_shrink(CUSTOM_SEARCH_PROMPT, raw, groq_key, groq_model, log, query=query)
+    return result.get("jobs", []), result.get("news", [])
 
 
 def finalize_and_send(jobs: list, news: list, log=print, to_addr: str | None = None,
