@@ -62,7 +62,7 @@ class HistoryCard extends StatelessWidget {
                           ),
                           Text(
                             _formatSeenAt(item.seenAt),
-                            style: const TextStyle(color: LedgerColors.slate, fontSize: 10),
+                            style: const TextStyle(color: LedgerColors.slate, fontSize: 11),
                           ),
                         ],
                       ),

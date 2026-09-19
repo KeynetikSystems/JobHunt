@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../api_client.dart';
+import '../error_utils.dart';
+import '../local_store.dart';
 import '../models/account_status.dart';
 import '../theme.dart';
 
@@ -28,6 +30,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _accountStatus = '';
   String _alertsStatus = '';
   AccountStatus? _account;
+  bool _notificationsEnabled = true;
 
   @override
   void initState() {
@@ -39,6 +42,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _loadCv();
       _loadAccount();
     }
+    LocalStore.loadNotificationsEnabled().then((enabled) {
+      if (mounted) setState(() => _notificationsEnabled = enabled);
+    });
+  }
+
+  Future<void> _setNotificationsEnabled(bool enabled) async {
+    setState(() => _notificationsEnabled = enabled);
+    await LocalStore.setNotificationsEnabled(enabled);
   }
 
   Future<void> _loadAccount() async {
@@ -69,7 +80,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await ApiClient.instance.resendVerification();
       if (mounted) setState(() => _accountStatus = 'Verification email sent — check your inbox.');
     } catch (e) {
-      if (mounted) setState(() => _accountStatus = 'Failed: $e');
+      if (mounted) setState(() => _accountStatus = 'Failed: ${friendlyError(e)}');
     } finally {
       if (mounted) setState(() => _accountBusy = false);
     }
@@ -87,7 +98,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _upgradeNoteCtrl.clear();
       }
     } catch (e) {
-      if (mounted) setState(() => _accountStatus = 'Failed: $e');
+      if (mounted) setState(() => _accountStatus = 'Failed: ${friendlyError(e)}');
     } finally {
       if (mounted) setState(() => _accountBusy = false);
     }
@@ -105,7 +116,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       if (mounted) setState(() => _alertsStatus = 'Alert settings saved.');
     } catch (e) {
-      if (mounted) setState(() => _alertsStatus = 'Save failed: $e');
+      if (mounted) setState(() => _alertsStatus = 'Save failed: ${friendlyError(e)}');
     } finally {
       if (mounted) setState(() => _alertsBusy = false);
     }
@@ -129,7 +140,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await ApiClient.instance.saveCv(_cvCtrl.text);
       if (mounted) setState(() => _cvStatus = 'CV saved.');
     } catch (e) {
-      if (mounted) setState(() => _cvStatus = 'Save failed: $e');
+      if (mounted) setState(() => _cvStatus = 'Save failed: ${friendlyError(e)}');
     } finally {
       if (mounted) setState(() => _cvBusy = false);
     }
@@ -159,7 +170,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await _loadCv();
       await _loadAccount();
     } catch (e) {
-      setState(() => _status = 'Connection failed: $e');
+      setState(() => _status = 'Connection failed: ${friendlyError(e)}');
     } finally {
       setState(() => _busy = false);
     }
@@ -238,166 +249,197 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   if (connected && _account != null) ...[
                     const SizedBox(height: 20),
-                    const Text(
-                      'Account',
-                      style: TextStyle(color: LedgerColors.parchment, fontFamily: 'Georgia', fontSize: 16),
-                    ),
-                    const SizedBox(height: 10),
-                    _accountRow('Plan', _account!.isPremium ? 'Premium' : 'Free'),
-                    _accountRow('Email verified', _account!.emailVerified ? 'Yes' : 'No'),
-                    _accountRow(
-                      'AI drafts today',
-                      _account!.materialsDailyCap == null
-                          ? '${_account!.materialsUsedToday} (unlimited)'
-                          : '${_account!.materialsUsedToday} / ${_account!.materialsDailyCap}',
-                    ),
-                    if (!_account!.emailVerified) ...[
-                      const SizedBox(height: 8),
-                      OutlinedButton(
-                        onPressed: _accountBusy ? null : _resendVerification,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: LedgerColors.brass,
-                          side: const BorderSide(color: LedgerColors.brass),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
-                        ),
-                        child: const Text('Resend verification email'),
-                      ),
-                    ],
-                    if (!_account!.isPremium) ...[
-                      const SizedBox(height: 12),
-                      _field('Request an upgrade (optional note)', _upgradeNoteCtrl,
-                          hint: "e.g. I'm hitting the daily draft limit"),
-                      OutlinedButton(
-                        onPressed: _accountBusy ? null : _requestUpgrade,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: LedgerColors.brass,
-                          side: const BorderSide(color: LedgerColors.brass),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
-                        ),
-                        child: const Text('Request upgrade'),
-                      ),
-                    ],
-                    if (_account!.isPremium) ...[
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Alert channels',
-                        style: TextStyle(color: LedgerColors.parchment, fontSize: 13, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        "Get new opportunities pushed automatically instead of pulling a scan yourself.",
-                        style: TextStyle(color: LedgerColors.slate, fontSize: 11),
-                      ),
-                      const SizedBox(height: 8),
-                      _field('Slack webhook URL', _slackCtrl, hint: 'https://hooks.slack.com/services/...'),
-                      _field('Telegram chat ID', _telegramCtrl, hint: '123456789'),
-                      Row(
+                    _sectionBox(
+                      title: 'Account',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          OutlinedButton(
-                            onPressed: _alertsBusy ? null : _saveAlerts,
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: LedgerColors.brass,
-                              side: const BorderSide(color: LedgerColors.brass),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
-                            ),
-                            child: Text(_alertsBusy ? 'Saving…' : 'Save alert settings'),
+                          _accountRow('Plan', _account!.isPremium ? 'Premium' : 'Free'),
+                          _accountRow('Email verified', _account!.emailVerified ? 'Yes' : 'No'),
+                          _accountRow(
+                            'AI drafts today',
+                            _account!.materialsDailyCap == null
+                                ? '${_account!.materialsUsedToday} (unlimited)'
+                                : '${_account!.materialsUsedToday} / ${_account!.materialsDailyCap}',
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(_alertsStatus, style: const TextStyle(color: LedgerColors.brass, fontSize: 12)),
+                          if (!_account!.emailVerified) ...[
+                            const SizedBox(height: 8),
+                            OutlinedButton(
+                              onPressed: _accountBusy ? null : _resendVerification,
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: LedgerColors.brass,
+                                side: const BorderSide(color: LedgerColors.brass),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                              ),
+                              child: const Text('Resend verification email'),
+                            ),
+                          ],
+                          if (!_account!.isPremium) ...[
+                            const SizedBox(height: 12),
+                            _field('Request an upgrade (optional note)', _upgradeNoteCtrl,
+                                hint: "e.g. I'm hitting the daily draft limit"),
+                            OutlinedButton(
+                              onPressed: _accountBusy ? null : _requestUpgrade,
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: LedgerColors.brass,
+                                side: const BorderSide(color: LedgerColors.brass),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                              ),
+                              child: const Text('Request upgrade'),
+                            ),
+                          ],
+                          if (_account!.isPremium) ...[
+                            const SizedBox(height: 16),
+                            const Text(
+                              'Alert channels (premium — server push)',
+                              style: TextStyle(color: LedgerColors.parchment, fontSize: 13, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              "Get new opportunities pushed to Slack/Telegram automatically, on top of "
+                              "the on-device notifications below.",
+                              style: TextStyle(color: LedgerColors.slate, fontSize: 11),
+                            ),
+                            const SizedBox(height: 8),
+                            _field('Slack webhook URL', _slackCtrl, hint: 'https://hooks.slack.com/services/...'),
+                            _field('Telegram chat ID', _telegramCtrl, hint: '123456789'),
+                            Row(
+                              children: [
+                                OutlinedButton(
+                                  onPressed: _alertsBusy ? null : _saveAlerts,
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: LedgerColors.brass,
+                                    side: const BorderSide(color: LedgerColors.brass),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                                  ),
+                                  child: Text(_alertsBusy ? 'Saving…' : 'Save alert settings'),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(_alertsStatus, style: const TextStyle(color: LedgerColors.brass, fontSize: 12)),
+                                ),
+                              ],
+                            ),
+                          ],
+                          if (_accountStatus.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text(_accountStatus, style: const TextStyle(color: LedgerColors.brass, fontSize: 12)),
+                          ],
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              TextButton(
+                                onPressed: () => _openLegalDoc('/privacy'),
+                                style: TextButton.styleFrom(foregroundColor: LedgerColors.slate, padding: EdgeInsets.zero),
+                                child: const Text('Privacy Policy', style: TextStyle(fontSize: 11)),
+                              ),
+                              const SizedBox(width: 16),
+                              TextButton(
+                                onPressed: () => _openLegalDoc('/terms'),
+                                style: TextButton.styleFrom(foregroundColor: LedgerColors.slate, padding: EdgeInsets.zero),
+                                child: const Text('Terms of Service', style: TextStyle(fontSize: 11)),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
-                    if (_accountStatus.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(_accountStatus, style: const TextStyle(color: LedgerColors.brass, fontSize: 12)),
-                    ],
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        TextButton(
-                          onPressed: () => _openLegalDoc('/privacy'),
-                          style: TextButton.styleFrom(foregroundColor: LedgerColors.slate, padding: EdgeInsets.zero),
-                          child: const Text('Privacy Policy', style: TextStyle(fontSize: 11)),
-                        ),
-                        const SizedBox(width: 16),
-                        TextButton(
-                          onPressed: () => _openLegalDoc('/terms'),
-                          style: TextButton.styleFrom(foregroundColor: LedgerColors.slate, padding: EdgeInsets.zero),
-                          child: const Text('Terms of Service', style: TextStyle(fontSize: 11)),
-                        ),
-                      ],
                     ),
                   ],
                   const SizedBox(height: 20),
-                  const Text(
-                    'Backend',
-                    style: TextStyle(color: LedgerColors.parchment, fontFamily: 'Georgia', fontSize: 16),
-                  ),
-                  const SizedBox(height: 10),
-                  _field('Backend URL', _urlCtrl, hint: 'http://10.0.2.2:8000'),
-                  _field('Email', _emailCtrl, hint: 'you@example.com'),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'This app never holds your Tavily/Groq/SMTP keys — those live on the '
-                    'backend server. Connecting just registers this email and stores the '
-                    'API key it gives back.',
-                    style: TextStyle(color: LedgerColors.slate, fontSize: 11, fontStyle: FontStyle.italic),
-                  ),
-                  if (connected) ...[
-                    const SizedBox(height: 24),
-                    const Text(
-                      'Your background / CV',
-                      style: TextStyle(color: LedgerColors.parchment, fontFamily: 'Georgia', fontSize: 16),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Paste your CV or a summary of your experience — used to draft tailored '
-                      'CV highlights and cover letters for opportunities you choose to apply to.',
-                      style: TextStyle(color: LedgerColors.slate, fontSize: 11),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: _cvCtrl,
-                      maxLines: 8,
-                      style: const TextStyle(color: LedgerColors.parchment, fontSize: 12, fontFamily: 'monospace'),
-                      decoration: InputDecoration(
-                        isDense: true,
-                        contentPadding: const EdgeInsets.all(10),
-                        filled: true,
-                        fillColor: LedgerColors.inkPanel,
-                        border: OutlineInputBorder(
-                          borderSide: const BorderSide(color: LedgerColors.hairline),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(color: LedgerColors.hairline),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(color: LedgerColors.brass),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
+                  _sectionBox(
+                    title: 'Notifications',
+                    child: Row(
                       children: [
-                        OutlinedButton(
-                          onPressed: _cvBusy ? null : _saveCv,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: LedgerColors.brass,
-                            side: const BorderSide(color: LedgerColors.brass),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                        Expanded(
+                          child: Text(
+                            'Notify me on this device when a search finds new results. '
+                            'Works on every plan — separate from premium\'s Slack/Telegram push above.',
+                            style: TextStyle(color: LedgerColors.slate, fontSize: 11),
                           ),
-                          child: Text(_cvBusy ? 'Saving…' : 'Save CV'),
                         ),
                         const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(_cvStatus, style: const TextStyle(color: LedgerColors.brass, fontSize: 12)),
+                        Switch(
+                          value: _notificationsEnabled,
+                          activeThumbColor: LedgerColors.brass,
+                          onChanged: _setNotificationsEnabled,
                         ),
                       ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  _sectionBox(
+                    title: 'Backend',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _field('Backend URL', _urlCtrl, hint: 'http://10.0.2.2:8000'),
+                        _field('Email', _emailCtrl, hint: 'you@example.com'),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'This app never holds your Tavily/Groq/SMTP keys — those live on the '
+                          'backend server. Connecting just registers this email and stores the '
+                          'API key it gives back.',
+                          style: TextStyle(color: LedgerColors.slate, fontSize: 11, fontStyle: FontStyle.italic),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (connected) ...[
+                    const SizedBox(height: 20),
+                    _sectionBox(
+                      title: 'Your background / CV',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Paste your CV or a summary of your experience — used to draft tailored '
+                            'CV highlights and cover letters for opportunities you choose to apply to.',
+                            style: TextStyle(color: LedgerColors.slate, fontSize: 11),
+                          ),
+                          const SizedBox(height: 10),
+                          TextField(
+                            controller: _cvCtrl,
+                            maxLines: 8,
+                            style: const TextStyle(color: LedgerColors.parchment, fontSize: 12, fontFamily: 'monospace'),
+                            decoration: InputDecoration(
+                              isDense: true,
+                              contentPadding: const EdgeInsets.all(10),
+                              filled: true,
+                              fillColor: LedgerColors.inkBg,
+                              border: OutlineInputBorder(
+                                borderSide: const BorderSide(color: LedgerColors.hairline),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderSide: const BorderSide(color: LedgerColors.hairline),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderSide: const BorderSide(color: LedgerColors.brass),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              OutlinedButton(
+                                onPressed: _cvBusy ? null : _saveCv,
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: LedgerColors.brass,
+                                  side: const BorderSide(color: LedgerColors.brass),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                                ),
+                                child: Text(_cvBusy ? 'Saving…' : 'Save CV'),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(_cvStatus, style: const TextStyle(color: LedgerColors.brass, fontSize: 12)),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ],
@@ -437,6 +479,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Visually groups a labeled section into its own bordered card, so the
+  /// screen reads as distinct blocks (Account, Notifications, Backend, CV)
+  /// instead of one undifferentiated scroll of headers and fields.
+  Widget _sectionBox({required String title, required Widget child}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: LedgerColors.inkPanel,
+        border: Border.all(color: LedgerColors.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(color: LedgerColors.parchment, fontFamily: 'Georgia', fontSize: 16)),
+          const SizedBox(height: 10),
+          child,
+        ],
       ),
     );
   }

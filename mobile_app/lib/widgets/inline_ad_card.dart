@@ -56,7 +56,7 @@ class _InlineAdCardState extends State<InlineAdCard> {
         children: [
           const Text(
             'AD',
-            style: TextStyle(color: LedgerColors.slate, fontSize: 10, letterSpacing: 1),
+            style: TextStyle(color: LedgerColors.slate, fontSize: 11, letterSpacing: 1),
           ),
           const SizedBox(height: 6),
           Center(child: _buildBody()),

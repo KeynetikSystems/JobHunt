@@ -79,8 +79,8 @@ class _RootShellState extends State<RootShell> {
         unselectedItemColor: LedgerColors.slate,
         type: BottomNavigationBarType.fixed,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), label: 'Dashboard'),
-          BottomNavigationBarItem(icon: Icon(Icons.history), label: 'History'),
+          BottomNavigationBarItem(icon: Icon(Icons.menu_book_outlined), label: 'Dashboard'),
+          BottomNavigationBarItem(icon: Icon(Icons.history_edu_outlined), label: 'History'),
           BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), label: 'Settings'),
         ],
       ),
