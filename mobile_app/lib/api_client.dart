@@ -20,7 +20,7 @@ class ApiClient {
   /// or type this — still fully editable in Settings for local dev, staging, or if this
   /// ever moves (custom domain, different host). Never auto-connects on its own: a
   /// real api_key only exists after the user enters their email and taps Connect.
-  static const defaultBackendUrl = 'https://jobhuntai-production-ed1d.up.railway.app';
+  static const defaultBackendUrl = 'https://jobhunt-production-bae5.up.railway.app';
 
   static const _baseUrlKey = 'backend_base_url';
   static const _apiKeyKey = 'backend_api_key';
