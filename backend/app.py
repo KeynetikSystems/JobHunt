@@ -27,15 +27,14 @@ Run locally:
 Then open http://127.0.0.1:8000/docs for interactive testing.
 """
 import os
-import smtplib
 import sys
 import threading
 import time
-from email.mime.text import MIMEText
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import digest_engine  # noqa: E402
+import send_report  # noqa: E402
 
 from fastapi import Depends, FastAPI, HTTPException, Request  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
@@ -271,58 +270,34 @@ class UpgradeRequestResponse(BaseModel):
 
 
 def _send_verification_email(to_addr: str, verify_url: str) -> None:
-    """Best-effort — registration still succeeds if this fails (a transient SMTP
+    """Best-effort — registration still succeeds if this fails (a transient send
     hiccup shouldn't lock someone out of retrying), but the account stays
     unverified until POST /api/resend-verification is called."""
-    env = digest_engine.load_env()
-    smtp_host = env.get("SMTP_HOST", "smtp.gmail.com")
-    smtp_port = int(env.get("SMTP_PORT", "587"))
-    smtp_user = env.get("SMTP_USER")
-    smtp_pass = env.get("SMTP_PASS")
-    if not smtp_user or not smtp_pass:
-        raise RuntimeError("SMTP_USER and SMTP_PASS must be set in the server's .env")
-
-    msg = MIMEText(
-        f"Confirm this is your email address to activate your JobHuntAI account:\n\n{verify_url}\n\n"
-        "If you didn't request this, ignore this email."
+    send_report.send_email(
+        to_addr,
+        "Verify your email — JobHuntAI",
+        text=(
+            f"Confirm this is your email address to activate your JobHuntAI account:\n\n{verify_url}\n\n"
+            "If you didn't request this, ignore this email."
+        ),
     )
-    msg["Subject"] = "Verify your email — JobHuntAI"
-    msg["From"] = smtp_user
-    msg["To"] = to_addr
-
-    with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
-        server.starttls()
-        server.login(smtp_user, smtp_pass)
-        server.send_message(msg)
 
 
 def _send_recovery_email(to_addr: str, api_key: str) -> None:
     """Delivers a freshly-issued API key to an already-verified account's own inbox —
     the only safe way to hand it over, since the HTTP response itself never can (see
-    RegisterResponse). Requires SMTP to be configured; if it's not, recovery for
-    verified accounts genuinely doesn't work yet, same tradeoff as verification email."""
-    env = digest_engine.load_env()
-    smtp_host = env.get("SMTP_HOST", "smtp.gmail.com")
-    smtp_port = int(env.get("SMTP_PORT", "587"))
-    smtp_user = env.get("SMTP_USER")
-    smtp_pass = env.get("SMTP_PASS")
-    if not smtp_user or not smtp_pass:
-        raise RuntimeError("SMTP_USER and SMTP_PASS must be set in the server's .env")
-
-    msg = MIMEText(
-        f"A new access key was requested for your JobHuntAI account:\n\n{api_key}\n\n"
-        "Your old key no longer works. Paste this one into the app's Settings/Backend "
-        "connection screen. If you didn't request this, someone else knows your email "
-        "address — consider that before reusing this key."
+    RegisterResponse). Requires RESEND_API_KEY to be configured; if it's not, recovery
+    for verified accounts genuinely doesn't work yet, same tradeoff as verification email."""
+    send_report.send_email(
+        to_addr,
+        "Your new access key — JobHuntAI",
+        text=(
+            f"A new access key was requested for your JobHuntAI account:\n\n{api_key}\n\n"
+            "Your old key no longer works. Paste this one into the app's Settings/Backend "
+            "connection screen. If you didn't request this, someone else knows your email "
+            "address — consider that before reusing this key."
+        ),
     )
-    msg["Subject"] = "Your new access key — JobHuntAI"
-    msg["From"] = smtp_user
-    msg["To"] = to_addr
-
-    with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
-        server.starttls()
-        server.login(smtp_user, smtp_pass)
-        server.send_message(msg)
 
 
 def _mark_seen(user_id: int, jobs: list, news: list) -> None:
