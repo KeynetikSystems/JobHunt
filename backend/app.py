@@ -290,7 +290,7 @@ def _send_verification_email(to_addr: str, verify_url: str) -> None:
     msg["From"] = smtp_user
     msg["To"] = to_addr
 
-    with smtplib.SMTP(smtp_host, smtp_port) as server:
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
         server.starttls()
         server.login(smtp_user, smtp_pass)
         server.send_message(msg)
@@ -319,7 +319,7 @@ def _send_recovery_email(to_addr: str, api_key: str) -> None:
     msg["From"] = smtp_user
     msg["To"] = to_addr
 
-    with smtplib.SMTP(smtp_host, smtp_port) as server:
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
         server.starttls()
         server.login(smtp_user, smtp_pass)
         server.send_message(msg)
