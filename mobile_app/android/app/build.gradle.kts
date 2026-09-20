@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.keynetiksystems.jobhunt_mobile"
+    namespace = "com.keynetiksystems.jobhuntai"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -17,7 +17,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.keynetiksystems.jobhunt_mobile"
+        applicationId = "com.keynetiksystems.jobhuntai"
         minSdk = 24
         targetSdk = 35
         versionCode = flutter.versionCode

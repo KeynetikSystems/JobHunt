@@ -1,4 +1,4 @@
-package com.keynetiksystems.jobhunt_mobile
+package com.keynetiksystems.jobhuntai
 
 import io.flutter.embedding.android.FlutterActivity
 
