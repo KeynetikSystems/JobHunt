@@ -59,6 +59,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await LocalStore.setNotificationsEnabled(enabled);
   }
 
+  /// Settings has several independent sections (Account, Alerts, Profile, Backend),
+  /// each with its own inline status text for persistent context next to the fields
+  /// it's about — but that's easy to miss if you're scrolled somewhere else when an
+  /// async result lands. This is the one guaranteed-visible channel, shown regardless
+  /// of scroll position, on top of (not instead of) the section-local text.
+  void _showFeedback(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: const TextStyle(color: LedgerColors.parchment, fontSize: 13)),
+        backgroundColor: isError ? const Color(0xFF3A1F1F) : LedgerColors.inkPanel,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
   Future<void> _loadAccount() async {
     try {
       final account = await ApiClient.instance.me();
@@ -85,9 +103,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     try {
       await ApiClient.instance.resendVerification();
-      if (mounted) setState(() => _accountStatus = 'Verification email sent — check your inbox.');
+      if (mounted) {
+        setState(() => _accountStatus = 'Verification email sent — check your inbox.');
+        _showFeedback('Verification email sent — check your inbox.');
+      }
     } catch (e) {
-      if (mounted) setState(() => _accountStatus = 'Failed: ${friendlyError(e)}');
+      final message = friendlyError(e);
+      if (mounted) {
+        setState(() => _accountStatus = 'Failed: $message');
+        _showFeedback('Failed: $message', isError: true);
+      }
     } finally {
       if (mounted) setState(() => _accountBusy = false);
     }
@@ -103,9 +128,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         setState(() => _accountStatus = "Request sent — we'll follow up by email.");
         _upgradeNoteCtrl.clear();
+        _showFeedback("Request sent — we'll follow up by email.");
       }
     } catch (e) {
-      if (mounted) setState(() => _accountStatus = 'Failed: ${friendlyError(e)}');
+      final message = friendlyError(e);
+      if (mounted) {
+        setState(() => _accountStatus = 'Failed: $message');
+        _showFeedback('Failed: $message', isError: true);
+      }
     } finally {
       if (mounted) setState(() => _accountBusy = false);
     }
@@ -121,9 +151,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         slackWebhookUrl: _slackCtrl.text.trim(),
         telegramChatId: _telegramCtrl.text.trim(),
       );
-      if (mounted) setState(() => _alertsStatus = 'Alert settings saved.');
+      if (mounted) {
+        setState(() => _alertsStatus = 'Alert settings saved.');
+        _showFeedback('Alert settings saved.');
+      }
     } catch (e) {
-      if (mounted) setState(() => _alertsStatus = 'Save failed: ${friendlyError(e)}');
+      final message = friendlyError(e);
+      if (mounted) {
+        setState(() => _alertsStatus = 'Save failed: $message');
+        _showFeedback('Save failed: $message', isError: true);
+      }
     } finally {
       if (mounted) setState(() => _alertsBusy = false);
     }
@@ -162,9 +199,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         education: _educationCtrl.text,
         skills: _skillsCtrl.text,
       ));
-      if (mounted) setState(() => _profileStatus = 'Profile saved.');
+      if (mounted) {
+        setState(() => _profileStatus = 'Profile saved.');
+        _showFeedback('Profile saved.');
+      }
     } catch (e) {
-      if (mounted) setState(() => _profileStatus = 'Save failed: ${friendlyError(e)}');
+      final message = friendlyError(e);
+      if (mounted) {
+        setState(() => _profileStatus = 'Save failed: $message');
+        _showFeedback('Save failed: $message', isError: true);
+      }
     } finally {
       if (mounted) setState(() => _profileBusy = false);
     }
@@ -194,13 +238,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     try {
       await ApiClient.instance.register(_urlCtrl.text.trim(), _emailCtrl.text.trim());
-      setState(() => _status =
-          'Connected as ${_emailCtrl.text.trim()}. Check your email to verify your account.');
+      final message = 'Connected as ${_emailCtrl.text.trim()}. Check your email to verify your account.';
+      setState(() => _status = message);
+      _showFeedback(message);
       widget.onConnectionChanged();
       await _loadProfile();
       await _loadAccount();
     } catch (e) {
-      setState(() => _status = 'Connection failed: ${friendlyError(e)}');
+      final message = friendlyError(e);
+      setState(() => _status = 'Connection failed: $message');
+      _showFeedback('Connection failed: $message', isError: true);
     } finally {
       setState(() => _busy = false);
     }
@@ -227,6 +274,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _alertsStatus = '';
       _account = null;
     });
+    _showFeedback('Disconnected.');
     widget.onConnectionChanged();
   }
 

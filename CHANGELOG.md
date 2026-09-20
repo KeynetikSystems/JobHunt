@@ -2,6 +2,41 @@
 
 ## 2026-09-20
 
+### UX critique follow-up: fix 4 of 5 findings, correct the 5th
+
+- **Icon-only affordances relying on Tooltip alone** — mobile's seniority sort control
+  (`Icons.arrow_upward`/`downward`) was icon+Tooltip only; `Tooltip` needs long-press on
+  mobile, which almost nobody discovers. Changed to `TextButton.icon` with a visible
+  "Seniority" label, matching what desktop's equivalent already showed as text.
+- **Dismiss button tap target too small** — mobile's was a 24×24px effective area
+  (`Padding(4)` + 16px icon), under the 44×44 accessibility minimum. Now a proper 44×44
+  `SizedBox` with the same small visible icon centered inside. Desktop's equivalent
+  (a 25×25-ish `MouseArea` with negative margins) enlarged to ~33×33 and given a
+  "Dismiss" tooltip it didn't have before.
+- **Fragmented feedback across 4 separate status strings in mobile Settings** — each
+  action (connect, resend verification, request upgrade, save alerts, save profile)
+  only showed its result inline in its own section, easy to miss if scrolled elsewhere.
+  Added `_showFeedback()` (a `SnackBar`), fired alongside every existing inline status
+  update — one guaranteed-visible channel on top of the existing per-section text, not
+  instead of it.
+- **Desktop's scan-vs-search distinction was explained only in a tooltip** — and while
+  investigating, found the tooltips themselves were stale: the Settings nav tooltip
+  still said "Configure email delivery, API keys, and search queries" (none of which
+  exist anymore post hosted-backend migration), and the Search button's tooltip claimed
+  it "uses your own API keys directly, no daily cap" — both wrong since the migration.
+  Fixed the stale text and added a permanently-visible caption above the search bar
+  explaining the difference from "Run scan now," instead of relying on hover-only text.
+- **Keyboard occlusion risk on mobile — investigated, found not actually a bug.**
+  Flagged in the critique without having verified it first. Checked
+  `AndroidManifest.xml` (`windowSoftInputMode="adjustResize"`, correct), Flutter's
+  default `resizeToAvoidBottomInset: true`, and the Dashboard's layout (plain `Column`,
+  no `Stack`/fixed-positioning) — all three are already correct, so the search bar and
+  its chips should already reflow above the keyboard. No code change made; correcting
+  the record instead of leaving an unverified claim standing.
+
+Verified: `flutter analyze` and both widget tests clean; desktop verified via headless
+load + `qmllint` (zero errors).
+
 ### Add Personal Profile section, replacing the single freeform CV field
 
 Settings (mobile and desktop) gained a "Personal Profile" section: full name, phone,

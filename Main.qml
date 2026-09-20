@@ -54,7 +54,7 @@ ApplicationWindow {
                         flat: true
                         hoverEnabled: true
                         Layout.fillWidth: true
-                        ToolTip.text: "View today's scan results"
+                        ToolTip.text: "Browse the shared scan, or run your own search"
                         ToolTip.visible: hovered
                         ToolTip.delay: 400
                         onClicked: root.currentPage = "dashboard"
@@ -100,7 +100,7 @@ ApplicationWindow {
                         flat: true
                         hoverEnabled: true
                         Layout.fillWidth: true
-                        ToolTip.text: "Configure email delivery, API keys, and search queries"
+                        ToolTip.text: "Connect to your backend, manage your account, and edit your profile"
                         ToolTip.visible: hovered
                         ToolTip.delay: 400
                         onClicked: root.currentPage = "settings"
@@ -340,10 +340,13 @@ ApplicationWindow {
 
                                         MouseArea {
                                             anchors.fill: parent
-                                            anchors.margins: -6
+                                            anchors.margins: -10
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: backend.dismissItem(modelData.url)
+                                            ToolTip.text: "Dismiss"
+                                            ToolTip.visible: containsMouse
+                                            ToolTip.delay: 400
                                         }
                                     }
 
@@ -438,10 +441,13 @@ ApplicationWindow {
 
                                         MouseArea {
                                             anchors.fill: parent
-                                            anchors.margins: -6
+                                            anchors.margins: -10
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: backend.dismissItem(modelData.url)
+                                            ToolTip.text: "Dismiss"
+                                            ToolTip.visible: containsMouse
+                                            ToolTip.delay: 400
                                         }
                                     }
 
@@ -496,7 +502,16 @@ ApplicationWindow {
                     }
                 }
 
-                // -- ad-hoc search, alongside the saved query-list scan above --------
+                // -- ad-hoc search, separate mechanism from "Run scan now" above ------
+                Text {
+                    text: "Search runs your own query right now (capped per day on the free plan) — different from \"Run scan now\" above, which just pulls the shared, hourly-refreshed results."
+                    color: slate
+                    font.pixelSize: 10
+                    font.italic: true
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                }
+
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 10
@@ -521,7 +536,7 @@ ApplicationWindow {
                         text: "Search"
                         enabled: !backend.busy
                         hoverEnabled: true
-                        ToolTip.text: "One-off search, separate from the saved query list above — uses your own API keys directly, no daily cap"
+                        ToolTip.text: "Runs your own search right now, through the shared backend — capped per day on the free plan"
                         ToolTip.visible: hovered
                         ToolTip.delay: 400
                         onClicked: backend.runSearch(searchField.text)

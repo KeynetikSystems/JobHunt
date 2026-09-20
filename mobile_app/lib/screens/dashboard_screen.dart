@@ -251,15 +251,17 @@ class DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           if (_filter != _FeedFilter.news && _jobs.isNotEmpty)
-            Tooltip(
-              message: _seniorityDescending ? 'Seniority: senior first — tap to reverse' : 'Seniority: junior first — tap to reverse',
-              child: IconButton(
-                onPressed: () => setState(() => _seniorityDescending = !_seniorityDescending),
-                icon: Icon(
-                  _seniorityDescending ? Icons.arrow_downward : Icons.arrow_upward,
-                  size: 18,
-                  color: LedgerColors.brass,
-                ),
+            TextButton.icon(
+              onPressed: () => setState(() => _seniorityDescending = !_seniorityDescending),
+              icon: Icon(
+                _seniorityDescending ? Icons.arrow_downward : Icons.arrow_upward,
+                size: 16,
+                color: LedgerColors.brass,
+              ),
+              label: const Text('Seniority', style: TextStyle(fontSize: 12, color: LedgerColors.brass)),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(44, 44),
                 visualDensity: VisualDensity.compact,
               ),
             ),
@@ -497,16 +499,22 @@ class DashboardScreenState extends State<DashboardScreen> {
       children: [
         card,
         Positioned(
-          top: 6,
-          right: 6,
+          top: 0,
+          right: 0,
+          // 44x44 tap target (the accessibility minimum) even though the visible icon
+          // stays small — the extra hit area extends invisibly over the card's own
+          // corner padding, which is fine since nothing else there is interactive.
           child: Tooltip(
             message: 'Dismiss',
-            child: InkWell(
-              onTap: onDismiss,
-              borderRadius: BorderRadius.circular(12),
-              child: const Padding(
-                padding: EdgeInsets.all(4),
-                child: Icon(Icons.close, size: 16, color: LedgerColors.slate),
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: InkWell(
+                onTap: onDismiss,
+                customBorder: const CircleBorder(),
+                child: const Center(
+                  child: Icon(Icons.close, size: 16, color: LedgerColors.slate),
+                ),
               ),
             ),
           ),
