@@ -5,6 +5,7 @@ import 'models/account_status.dart';
 import 'models/history_item.dart';
 import 'models/job_listing.dart';
 import 'models/news_item.dart';
+import 'models/user_profile.dart';
 
 class ScanResult {
   final List<JobListing> jobs;
@@ -192,29 +193,29 @@ class ApiClient {
         .toList();
   }
 
-  Future<String> getCv() async {
+  Future<UserProfile> getProfile() async {
     _requireConnected();
-    final res = await http.get(Uri.parse('$baseUrl/api/cv'), headers: _authHeaders);
+    final res = await http.get(Uri.parse('$baseUrl/api/profile'), headers: _authHeaders);
     if (res.statusCode != 200) {
-      throw Exception('Fetching CV failed (${res.statusCode}): ${res.body}');
+      throw Exception(_errorDetail(res));
     }
-    return (jsonDecode(res.body) as Map<String, dynamic>)['cv_text'] as String? ?? '';
+    return UserProfile.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
 
-  Future<void> saveCv(String cvText) async {
+  Future<void> saveProfile(UserProfile profile) async {
     _requireConnected();
     final res = await http.put(
-      Uri.parse('$baseUrl/api/cv'),
+      Uri.parse('$baseUrl/api/profile'),
       headers: _authHeaders,
-      body: jsonEncode({'cv_text': cvText}),
+      body: jsonEncode(profile.toJson()),
     );
     if (res.statusCode != 200) {
-      throw Exception('Saving CV failed (${res.statusCode}): ${res.body}');
+      throw Exception(_errorDetail(res));
     }
   }
 
-  /// Drafts CV highlights + a cover letter for one job, using the CV saved via
-  /// saveCv() and the backend's own Groq key. Returns (cvHighlights, coverLetter).
+  /// Drafts CV highlights + a cover letter for one job, using the profile saved via
+  /// saveProfile() and the backend's own Groq key. Returns (cvHighlights, coverLetter).
   /// Takes a plain map (title/firm/seniority/note/url) so both a JobListing and a
   /// job-kind HistoryItem can call this without an extra conversion type.
   Future<(String, String)> draftMaterials(Map<String, String> job) async {

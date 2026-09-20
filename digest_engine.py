@@ -159,8 +159,16 @@ APPLICATION_MATERIALS_PROMPT = """You are helping a job seeker tailor their appl
 specific role. Use ONLY the real background below — do not invent employers, titles, dates, \
 or achievements that aren't in it.
 
-Their background:
-{cv_text}
+Their name: {full_name}
+
+Work history:
+{work_history}
+
+Education:
+{education}
+
+Skills:
+{skills}
 
 The role they're applying to:
 Title: {title}
@@ -173,20 +181,28 @@ only from their real background above, reordered and reworded to foreground what
 relevant to this specific role.
 2. cover_letter: a complete, ready-to-send cover letter (3-4 short paragraphs, first person, \
 professional, not generic or robotic) that references specific details from both their \
-background and this role.
+background and this role, and signed off with their real name.
 
 Respond with ONLY a JSON object in this exact shape, nothing else:
 {{"cv_highlights": "...", "cover_letter": "..."}}
 """
 
 
-def generate_application_materials(item: dict, cv_text: str, groq_key: str, groq_model: str) -> dict:
+def generate_application_materials(item: dict, profile: dict, groq_key: str, groq_model: str) -> dict:
     """Tailored CV highlights + a cover letter draft for one job, grounded in the user's own
-    pasted background (never invented). Reuses groq_complete's JSON-mode plumbing."""
-    if not cv_text.strip():
-        raise RuntimeError("Add your CV/background in Settings first.")
+    profile (never invented). `profile` is the structured personal-profile dict (full_name,
+    work_history, education, skills — see backend's ProfileRequest/users columns; phone,
+    location, and linkedin_url are reference fields for the user's own use, not fed into the
+    prompt). Reuses groq_complete's JSON-mode plumbing."""
+    work_history = profile.get("work_history", "")
+    skills = profile.get("skills", "")
+    if not work_history.strip() and not skills.strip():
+        raise RuntimeError("Add your work history or skills in Settings first.")
     prompt = APPLICATION_MATERIALS_PROMPT.format(
-        cv_text=cv_text[:4000],
+        full_name=profile.get("full_name") or "the applicant",
+        work_history=work_history[:3000],
+        education=profile.get("education", "")[:1000],
+        skills=skills[:500],
         title=item.get("title", ""),
         firm=item.get("firm", ""),
         note=item.get("note", ""),

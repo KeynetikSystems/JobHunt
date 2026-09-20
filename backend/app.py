@@ -215,12 +215,24 @@ class HistoryResponse(BaseModel):
     items: list[HistoryItem]
 
 
-class CvRequest(BaseModel):
-    cv_text: str
+class ProfileRequest(BaseModel):
+    full_name: str = ""
+    phone: str = ""
+    location: str = ""
+    linkedin_url: str = ""
+    work_history: str = ""
+    education: str = ""
+    skills: str = ""
 
 
-class CvResponse(BaseModel):
-    cv_text: str
+class ProfileResponse(BaseModel):
+    full_name: str
+    phone: str
+    location: str
+    linkedin_url: str
+    work_history: str
+    education: str
+    skills: str
 
 
 class MaterialsRequest(BaseModel):
@@ -545,28 +557,50 @@ def history(user: dict = Depends(auth.require_verified_user)):
     return HistoryResponse(items=[HistoryItem(**dict(row)) for row in rows])
 
 
-@app.get("/api/cv", response_model=CvResponse)
-def get_cv(user: dict = Depends(auth.require_verified_user)):
-    """The user's own background/experience, saved once here so mobile doesn't resend
-    it on every /api/materials call — mirrors the desktop app's cv.txt."""
-    return CvResponse(cv_text=user["cv_text"])
+def _profile_of(user: dict) -> dict:
+    return {
+        "full_name": user["full_name"],
+        "phone": user["phone"],
+        "location": user["location"],
+        "linkedin_url": user["linkedin_url"],
+        "work_history": user["work_history"],
+        "education": user["education"],
+        "skills": user["skills"],
+    }
 
 
-@app.put("/api/cv", response_model=CvResponse)
-def put_cv(body: CvRequest, user: dict = Depends(auth.require_verified_user)):
+@app.get("/api/profile", response_model=ProfileResponse)
+def get_profile(user: dict = Depends(auth.require_verified_user)):
+    """The user's personal profile — name/contact details plus structured work
+    history/education/skills, saved once here so mobile/desktop don't resend it on
+    every /api/materials call. Replaces the old single freeform cv_text field."""
+    return ProfileResponse(**_profile_of(user))
+
+
+@app.put("/api/profile", response_model=ProfileResponse)
+def put_profile(body: ProfileRequest, user: dict = Depends(auth.require_verified_user)):
     with db.get_db() as conn:
-        conn.execute("UPDATE users SET cv_text = ? WHERE id = ?", (body.cv_text, user["id"]))
-    return CvResponse(cv_text=body.cv_text)
+        conn.execute(
+            """
+            UPDATE users SET full_name = ?, phone = ?, location = ?, linkedin_url = ?,
+                work_history = ?, education = ?, skills = ?
+            WHERE id = ?
+            """,
+            (body.full_name, body.phone, body.location, body.linkedin_url,
+             body.work_history, body.education, body.skills, user["id"]),
+        )
+    return ProfileResponse(**body.model_dump())
 
 
 @app.post("/api/materials", response_model=MaterialsResponse)
 def materials(body: MaterialsRequest, user: dict = Depends(auth.require_verified_user)):
-    """Tailored CV highlights + a cover letter for one job, using this user's saved CV
-    and the server's own Groq key — the mobile equivalent of the desktop app's
+    """Tailored CV highlights + a cover letter for one job, using this user's saved
+    profile and the server's own Groq key — the mobile equivalent of the desktop app's
     "Draft CV highlights & cover letter" button. Free plan is capped per day since
     each call costs a real Groq request the server itself pays for; premium is unlimited."""
-    if not user["cv_text"].strip():
-        raise HTTPException(status_code=400, detail="Add your CV/background first (PUT /api/cv).")
+    profile = _profile_of(user)
+    if not profile["work_history"].strip() and not profile["skills"].strip():
+        raise HTTPException(status_code=400, detail="Add your work history or skills first (PUT /api/profile).")
     if user["plan"] != "premium":
         used = _usage_count_today(user["id"], "materials")
         if used >= FREE_MATERIALS_DAILY_CAP:
@@ -578,7 +612,7 @@ def materials(body: MaterialsRequest, user: dict = Depends(auth.require_verified
     groq_key = env.get("GROQ_API_KEY")
     groq_model = env.get("GROQ_MODEL") or digest_engine.DEFAULT_GROQ_MODEL
     try:
-        result = digest_engine.generate_application_materials(body.job, user["cv_text"], groq_key, groq_model)
+        result = digest_engine.generate_application_materials(body.job, profile, groq_key, groq_model)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     _log_usage(user["id"], "materials")

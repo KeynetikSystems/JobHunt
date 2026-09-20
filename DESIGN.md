@@ -109,7 +109,7 @@ drift):
 - **Discovery**: `POST /api/scan` (shared cache pull), `POST /api/search` (ad-hoc,
   capped)
 - **Actions**: `POST /api/send` (email + mark seen), `POST /api/dismiss` (mark seen only)
-- **Data**: `GET /api/history`, `GET/PUT /api/cv`, `POST /api/materials`,
+- **Data**: `GET /api/history`, `GET/PUT /api/profile`, `POST /api/materials`,
   `GET/PUT /api/alerts` (premium Slack/Telegram)
 
 Auth is one header (`X-API-Key`), one SQLite lookup (`backend/auth.py`) — no session,

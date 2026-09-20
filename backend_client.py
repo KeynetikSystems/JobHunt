@@ -99,12 +99,17 @@ def history(base_url: str, api_key: str) -> list:
     return _request("GET", f"{base_url}/api/history", _auth_headers(api_key)).get("items", [])
 
 
-def get_cv(base_url: str, api_key: str) -> str:
-    return _request("GET", f"{base_url}/api/cv", _auth_headers(api_key)).get("cv_text", "")
+_PROFILE_FIELDS = ("full_name", "phone", "location", "linkedin_url", "work_history", "education", "skills")
 
 
-def save_cv(base_url: str, api_key: str, cv_text: str) -> None:
-    _request("PUT", f"{base_url}/api/cv", _auth_headers(api_key), {"cv_text": cv_text})
+def get_profile(base_url: str, api_key: str) -> dict:
+    result = _request("GET", f"{base_url}/api/profile", _auth_headers(api_key))
+    return {field: result.get(field, "") for field in _PROFILE_FIELDS}
+
+
+def save_profile(base_url: str, api_key: str, profile: dict) -> None:
+    body = {field: profile.get(field, "") for field in _PROFILE_FIELDS}
+    _request("PUT", f"{base_url}/api/profile", _auth_headers(api_key), body)
 
 
 def materials(base_url: str, api_key: str, job: dict) -> dict:

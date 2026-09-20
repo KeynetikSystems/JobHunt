@@ -75,7 +75,7 @@ class DigestBackend(QObject):
         self._backend_url = ""
         self._api_key = ""
         self._email = ""
-        self._cv_text = ""
+        self._profile = {}
         self._seniority_descending = False
         self.loadSettings()
         # Actual first refresh happens from QML's Component.onCompleted (backend.refreshAccount()),
@@ -131,9 +131,9 @@ class DigestBackend(QObject):
     def email(self):
         return self._email
 
-    @Property(str, notify=settingsChanged)
-    def cvText(self):
-        return self._cv_text
+    @Property("QVariantMap", notify=settingsChanged)
+    def profile(self):
+        return self._profile
 
     @Property("QVariantMap", notify=accountChanged)
     def account(self):
@@ -166,17 +166,17 @@ class DigestBackend(QObject):
             pass  # Not fatal — the History page just won't refresh this time.
 
     def _refresh_account_sync(self):
-        """Fetches account status, CV text, and history — called after connecting and
+        """Fetches account status, profile, and history — called after connecting and
         whenever Settings wants a fresh read. Silent on failure, matching the mobile
-        app's own _loadAccount/_loadCv pattern: the Account section and CV field just
-        won't show/refresh until this next succeeds."""
+        app's own _loadAccount/_loadProfile pattern: the Account section and profile
+        fields just won't show/refresh until this next succeeds."""
         try:
             self._account = backend_client.me(self._backend_url, self._api_key)
             self.accountChanged.emit()
         except Exception:
             pass
         try:
-            self._cv_text = backend_client.get_cv(self._backend_url, self._api_key)
+            self._profile = backend_client.get_profile(self._backend_url, self._api_key)
             self.settingsChanged.emit()
         except Exception:
             pass
@@ -216,7 +216,7 @@ class DigestBackend(QObject):
         self._api_key = ""
         self._email = ""
         self._account = {}
-        self._cv_text = ""
+        self._profile = {}
         self._jobs = []
         self._news = []
         self._history = []
@@ -270,19 +270,24 @@ class DigestBackend(QObject):
 
         threading.Thread(target=worker, daemon=True).start()
 
-    @Slot(str)
-    def saveCv(self, text):
+    @Slot(str, str, str, str, str, str, str)
+    def saveProfile(self, full_name, phone, location, linkedin_url, work_history, education, skills):
         if self._busy:
             return
+        profile = {
+            "full_name": full_name, "phone": phone, "location": location,
+            "linkedin_url": linkedin_url, "work_history": work_history,
+            "education": education, "skills": skills,
+        }
         self._set_busy(True)
         self._set_status("Saving…")
 
         def worker():
             try:
-                backend_client.save_cv(self._backend_url, self._api_key, text)
-                self._cv_text = text
+                backend_client.save_profile(self._backend_url, self._api_key, profile)
+                self._profile = profile
                 self.settingsChanged.emit()
-                self._set_status("CV saved.")
+                self._set_status("Profile saved.")
             except Exception as e:
                 self._set_status(f"Save failed: {_friendly_error(e)}")
             finally:

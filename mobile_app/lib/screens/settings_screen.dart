@@ -4,6 +4,7 @@ import '../api_client.dart';
 import '../error_utils.dart';
 import '../local_store.dart';
 import '../models/account_status.dart';
+import '../models/user_profile.dart';
 import '../theme.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -17,16 +18,22 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final _urlCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
-  final _cvCtrl = TextEditingController();
+  final _fullNameCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  final _locationCtrl = TextEditingController();
+  final _linkedinCtrl = TextEditingController();
+  final _workHistoryCtrl = TextEditingController();
+  final _educationCtrl = TextEditingController();
+  final _skillsCtrl = TextEditingController();
   final _upgradeNoteCtrl = TextEditingController();
   final _slackCtrl = TextEditingController();
   final _telegramCtrl = TextEditingController();
   bool _busy = false;
-  bool _cvBusy = false;
+  bool _profileBusy = false;
   bool _accountBusy = false;
   bool _alertsBusy = false;
   String _status = '';
-  String _cvStatus = '';
+  String _profileStatus = '';
   String _accountStatus = '';
   String _alertsStatus = '';
   AccountStatus? _account;
@@ -39,7 +46,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _urlCtrl.text = api.baseUrl ?? '';
     _emailCtrl.text = api.email ?? '';
     if (api.isConnected) {
-      _loadCv();
+      _loadProfile();
       _loadAccount();
     }
     LocalStore.loadNotificationsEnabled().then((enabled) {
@@ -122,27 +129,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _loadCv() async {
+  Future<void> _loadProfile() async {
     try {
-      final cv = await ApiClient.instance.getCv();
-      if (mounted) setState(() => _cvCtrl.text = cv);
+      final profile = await ApiClient.instance.getProfile();
+      if (!mounted) return;
+      setState(() {
+        _fullNameCtrl.text = profile.fullName;
+        _phoneCtrl.text = profile.phone;
+        _locationCtrl.text = profile.location;
+        _linkedinCtrl.text = profile.linkedinUrl;
+        _workHistoryCtrl.text = profile.workHistory;
+        _educationCtrl.text = profile.education;
+        _skillsCtrl.text = profile.skills;
+      });
     } catch (_) {
-      // Not fatal — the field just starts empty; saving will still work.
+      // Not fatal — fields just start empty; saving will still work.
     }
   }
 
-  Future<void> _saveCv() async {
+  Future<void> _saveProfile() async {
     setState(() {
-      _cvBusy = true;
-      _cvStatus = 'Saving…';
+      _profileBusy = true;
+      _profileStatus = 'Saving…';
     });
     try {
-      await ApiClient.instance.saveCv(_cvCtrl.text);
-      if (mounted) setState(() => _cvStatus = 'CV saved.');
+      await ApiClient.instance.saveProfile(UserProfile(
+        fullName: _fullNameCtrl.text,
+        phone: _phoneCtrl.text,
+        location: _locationCtrl.text,
+        linkedinUrl: _linkedinCtrl.text,
+        workHistory: _workHistoryCtrl.text,
+        education: _educationCtrl.text,
+        skills: _skillsCtrl.text,
+      ));
+      if (mounted) setState(() => _profileStatus = 'Profile saved.');
     } catch (e) {
-      if (mounted) setState(() => _cvStatus = 'Save failed: ${friendlyError(e)}');
+      if (mounted) setState(() => _profileStatus = 'Save failed: ${friendlyError(e)}');
     } finally {
-      if (mounted) setState(() => _cvBusy = false);
+      if (mounted) setState(() => _profileBusy = false);
     }
   }
 
@@ -150,7 +174,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _urlCtrl.dispose();
     _emailCtrl.dispose();
-    _cvCtrl.dispose();
+    _fullNameCtrl.dispose();
+    _phoneCtrl.dispose();
+    _locationCtrl.dispose();
+    _linkedinCtrl.dispose();
+    _workHistoryCtrl.dispose();
+    _educationCtrl.dispose();
+    _skillsCtrl.dispose();
     _upgradeNoteCtrl.dispose();
     _slackCtrl.dispose();
     _telegramCtrl.dispose();
@@ -167,7 +197,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() => _status =
           'Connected as ${_emailCtrl.text.trim()}. Check your email to verify your account.');
       widget.onConnectionChanged();
-      await _loadCv();
+      await _loadProfile();
       await _loadAccount();
     } catch (e) {
       setState(() => _status = 'Connection failed: ${friendlyError(e)}');
@@ -181,12 +211,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _urlCtrl.text = ApiClient.instance.baseUrl ?? '';
       _emailCtrl.clear();
-      _cvCtrl.clear();
+      _fullNameCtrl.clear();
+      _phoneCtrl.clear();
+      _locationCtrl.clear();
+      _linkedinCtrl.clear();
+      _workHistoryCtrl.clear();
+      _educationCtrl.clear();
+      _skillsCtrl.clear();
       _slackCtrl.clear();
       _telegramCtrl.clear();
       _upgradeNoteCtrl.clear();
       _status = 'Disconnected.';
-      _cvStatus = '';
+      _profileStatus = '';
       _accountStatus = '';
       _alertsStatus = '';
       _account = null;
@@ -387,54 +423,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   if (connected) ...[
                     const SizedBox(height: 20),
                     _sectionBox(
-                      title: 'Your background / CV',
+                      title: 'Personal Profile',
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Paste your CV or a summary of your experience — used to draft tailored '
-                            'CV highlights and cover letters for opportunities you choose to apply to.',
+                            'Used to draft tailored CV highlights and cover letters, and as a quick '
+                            'reference when filling out application forms elsewhere. Never sent '
+                            'anywhere except Groq, alongside the specific role you ask to draft for.',
                             style: TextStyle(color: LedgerColors.slate, fontSize: 11),
                           ),
                           const SizedBox(height: 10),
-                          TextField(
-                            controller: _cvCtrl,
-                            maxLines: 8,
-                            style: const TextStyle(color: LedgerColors.parchment, fontSize: 12, fontFamily: 'monospace'),
-                            decoration: InputDecoration(
-                              isDense: true,
-                              contentPadding: const EdgeInsets.all(10),
-                              filled: true,
-                              fillColor: LedgerColors.inkBg,
-                              border: OutlineInputBorder(
-                                borderSide: const BorderSide(color: LedgerColors.hairline),
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderSide: const BorderSide(color: LedgerColors.hairline),
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderSide: const BorderSide(color: LedgerColors.brass),
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                          ),
+                          _field('Full name', _fullNameCtrl),
+                          _field('Phone number', _phoneCtrl),
+                          _field('Location / City', _locationCtrl),
+                          _field('LinkedIn / portfolio URL', _linkedinCtrl),
+                          _multilineField('Work history', _workHistoryCtrl, maxLines: 8),
+                          _multilineField('Education', _educationCtrl, maxLines: 4),
+                          _multilineField('Skills', _skillsCtrl, maxLines: 3),
                           const SizedBox(height: 8),
                           Row(
                             children: [
                               OutlinedButton(
-                                onPressed: _cvBusy ? null : _saveCv,
+                                onPressed: _profileBusy ? null : _saveProfile,
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: LedgerColors.brass,
                                   side: const BorderSide(color: LedgerColors.brass),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
                                 ),
-                                child: Text(_cvBusy ? 'Saving…' : 'Save CV'),
+                                child: Text(_profileBusy ? 'Saving…' : 'Save profile'),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
-                                child: Text(_cvStatus, style: const TextStyle(color: LedgerColors.brass, fontSize: 12)),
+                                child: Text(_profileStatus, style: const TextStyle(color: LedgerColors.brass, fontSize: 12)),
                               ),
                             ],
                           ),
@@ -538,6 +559,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
               contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
               filled: true,
               fillColor: LedgerColors.inkPanel,
+              border: OutlineInputBorder(
+                borderSide: const BorderSide(color: LedgerColors.hairline),
+                borderRadius: BorderRadius.circular(2),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderSide: const BorderSide(color: LedgerColors.hairline),
+                borderRadius: BorderRadius.circular(2),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderSide: const BorderSide(color: LedgerColors.brass),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _multilineField(String label, TextEditingController ctrl, {required int maxLines}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(color: LedgerColors.slate, fontSize: 11)),
+          const SizedBox(height: 4),
+          TextField(
+            controller: ctrl,
+            maxLines: maxLines,
+            style: const TextStyle(color: LedgerColors.parchment, fontSize: 12, fontFamily: 'monospace'),
+            decoration: InputDecoration(
+              isDense: true,
+              contentPadding: const EdgeInsets.all(10),
+              filled: true,
+              fillColor: LedgerColors.inkBg,
               border: OutlineInputBorder(
                 borderSide: const BorderSide(color: LedgerColors.hairline),
                 borderRadius: BorderRadius.circular(2),

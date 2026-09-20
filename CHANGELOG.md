@@ -2,6 +2,36 @@
 
 ## 2026-09-20
 
+### Add Personal Profile section, replacing the single freeform CV field
+
+Settings (mobile and desktop) gained a "Personal Profile" section: full name, phone,
+location, LinkedIn/portfolio URL (reference fields for the user's own use when filling
+out application forms elsewhere), plus work history, education, and skills as three
+separate structured fields, replacing the old single "CV/background" text blob.
+
+- **Backend**: `users.cv_text` retired in favor of seven new columns. `GET/PUT /api/cv`
+  replaced by `GET/PUT /api/profile`. `digest_engine.generate_application_materials()`
+  now takes a `profile: dict` instead of a `cv_text: str`, and its prompt references
+  work history/education/skills as separate sections instead of one undifferentiated
+  block — also now signs cover letters with the user's real name. `/api/materials`
+  requires work history or skills (not just "any CV text") before drafting.
+- **Migration**: existing installs get `cv_text` copied into the new `work_history`
+  column (`db._migrate_cv_text_to_profile`) — can't intelligently split unstructured
+  text into education/skills, so it all lands in one bucket for the user to reorganize
+  themselves. Legacy column left in place afterward, unused.
+- **Desktop**: `backend.cvText` → `backend.profile` (QVariantMap), `saveCv()` →
+  `saveProfile(...)` (7 string params). New fields added to the Settings page.
+- **Mobile**: new `UserProfile` model, `ApiClient.getCv()/saveCv()` →
+  `getProfile()/saveProfile()`. Settings screen's CV section replaced with the same
+  seven fields.
+
+Verified live against an isolated backend: confirmed the `cv_text` → `work_history`
+migration actually runs (simulated a legacy row, restarted the server, confirmed the
+text landed in the right place), a full profile save/fetch round-trips exactly, and
+`/api/materials` correctly rejects an empty profile with the new message. `flutter
+analyze` and both widget tests clean; desktop verified via headless load + qmllint
+(zero errors).
+
 ### Fix: single-key-per-account model broke multi-device use
 
 Direct regression from the account-recovery fix in the 2026-09-19 hardening pass below:

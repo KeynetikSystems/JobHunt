@@ -100,7 +100,7 @@ on the free plan.
 
 Routes: `GET /api/health`, `POST /api/register`, `GET /api/verify`,
 `POST /api/resend-verification`, `POST /api/scan`, `POST /api/search`, `POST /api/send`,
-`POST /api/dismiss`, `GET /api/me`, `GET /api/history`, `GET/PUT /api/cv`,
+`POST /api/dismiss`, `GET /api/me`, `GET /api/history`, `GET/PUT /api/profile`,
 `POST /api/materials`, `GET/PUT /api/alerts`, `POST /api/upgrade-request`.
 
 ## Mobile app

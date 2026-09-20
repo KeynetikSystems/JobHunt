@@ -751,47 +751,98 @@ ApplicationWindow {
                             }
                         }
 
-                        // -- CV (only once connected) ---------------------------------
+                        // -- Personal Profile (only once connected) --------------------
                         SettingsSection {
-                            title: "Your background / CV"
+                            title: "Personal Profile"
                             visible: backend.connected
 
                             Text {
-                                text: "Paste your CV or a summary of your experience — used to draft tailored CV highlights and cover letters for opportunities you choose to apply to."
+                                text: "Used to draft tailored CV highlights and cover letters, and as a quick reference when filling out application forms elsewhere. Never sent anywhere except Groq, alongside the specific role you ask to draft for."
                                 color: slate
                                 font.pixelSize: 12
                                 wrapMode: Text.WordWrap
                                 Layout.fillWidth: true
                             }
+
+                            SettingsField {
+                                id: fullNameField
+                                label: "Full name"; text: backend.profile.full_name || ""
+                            }
+                            SettingsField {
+                                id: phoneField
+                                label: "Phone number"; text: backend.profile.phone || ""
+                            }
+                            SettingsField {
+                                id: locationField
+                                label: "Location / City"; text: backend.profile.location || ""
+                            }
+                            SettingsField {
+                                id: linkedinField
+                                label: "LinkedIn / portfolio URL"; text: backend.profile.linkedin_url || ""
+                            }
+
+                            Text { text: "Work history"; color: slate; font.pixelSize: 12 }
                             ScrollView {
-                                id: cvScroll
+                                id: workHistoryScroll
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 220
+                                Layout.preferredHeight: 160
                                 clip: true
                                 TextArea {
-                                    id: cvArea
-                                    width: cvScroll.availableWidth
-                                    text: backend.cvText
+                                    id: workHistoryArea
+                                    width: workHistoryScroll.availableWidth
+                                    text: backend.profile.work_history || ""
                                     color: parchment
                                     font.family: "Courier"
                                     font.pixelSize: 12
                                     wrapMode: Text.WordWrap
-                                    hoverEnabled: true
-                                    ToolTip.text: "Never sent anywhere except Groq, alongside the specific role you ask to draft for"
-                                    ToolTip.visible: hovered
-                                    ToolTip.delay: 400
-                                    background: Rectangle {
-                                        color: inkBg
-                                        border.color: hairline
-                                        border.width: 1
-                                    }
+                                    background: Rectangle { color: inkBg; border.color: hairline; border.width: 1 }
                                 }
                             }
+
+                            Text { text: "Education"; color: slate; font.pixelSize: 12 }
+                            ScrollView {
+                                id: educationScroll
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 100
+                                clip: true
+                                TextArea {
+                                    id: educationArea
+                                    width: educationScroll.availableWidth
+                                    text: backend.profile.education || ""
+                                    color: parchment
+                                    font.family: "Courier"
+                                    font.pixelSize: 12
+                                    wrapMode: Text.WordWrap
+                                    background: Rectangle { color: inkBg; border.color: hairline; border.width: 1 }
+                                }
+                            }
+
+                            Text { text: "Skills"; color: slate; font.pixelSize: 12 }
+                            ScrollView {
+                                id: skillsScroll
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 80
+                                clip: true
+                                TextArea {
+                                    id: skillsArea
+                                    width: skillsScroll.availableWidth
+                                    text: backend.profile.skills || ""
+                                    color: parchment
+                                    font.family: "Courier"
+                                    font.pixelSize: 12
+                                    wrapMode: Text.WordWrap
+                                    background: Rectangle { color: inkBg; border.color: hairline; border.width: 1 }
+                                }
+                            }
+
                             Button {
-                                text: "Save CV"
+                                text: "Save profile"
                                 enabled: !backend.busy
                                 hoverEnabled: true
-                                onClicked: backend.saveCv(cvArea.text)
+                                onClicked: backend.saveProfile(
+                                    fullNameField.text, phoneField.text, locationField.text, linkedinField.text,
+                                    workHistoryArea.text, educationArea.text, skillsArea.text
+                                )
                                 background: Rectangle { color: "transparent"; border.color: brass; border.width: 1; radius: 2 }
                                 contentItem: Text { text: parent.text; color: brass; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter }
                                 padding: 6

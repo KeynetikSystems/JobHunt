@@ -21,7 +21,18 @@ CREATE TABLE IF NOT EXISTS users (
     email TEXT UNIQUE NOT NULL,
     email_verified INTEGER NOT NULL DEFAULT 0,
     verify_token TEXT,
-    cv_text TEXT NOT NULL DEFAULT '',
+    -- Personal profile: full_name/phone/location/linkedin_url are reference fields for
+    -- the user's own use when filling out application forms elsewhere, not fed into AI
+    -- drafting (except full_name, for signing cover letters). work_history/education/
+    -- skills are what actually grounds /api/materials — structured in place of the old
+    -- single freeform cv_text blob, so the AI gets cleaner context per category.
+    full_name TEXT NOT NULL DEFAULT '',
+    phone TEXT NOT NULL DEFAULT '',
+    location TEXT NOT NULL DEFAULT '',
+    linkedin_url TEXT NOT NULL DEFAULT '',
+    work_history TEXT NOT NULL DEFAULT '',
+    education TEXT NOT NULL DEFAULT '',
+    skills TEXT NOT NULL DEFAULT '',
     plan TEXT NOT NULL DEFAULT 'free',
     slack_webhook_url TEXT NOT NULL DEFAULT '',
     telegram_chat_id TEXT NOT NULL DEFAULT '',
@@ -88,7 +99,17 @@ _SEEN_ITEMS_MIGRATIONS = [
 ]
 
 _USERS_MIGRATIONS = [
+    # Legacy step-stone column — existing rows' freeform CV text moves from here into
+    # the new work_history column (see _migrate_cv_text_to_profile() below). Left in
+    # place afterward, unused; new installs never have this column at all.
     ("cv_text", "TEXT NOT NULL DEFAULT ''"),
+    ("full_name", "TEXT NOT NULL DEFAULT ''"),
+    ("phone", "TEXT NOT NULL DEFAULT ''"),
+    ("location", "TEXT NOT NULL DEFAULT ''"),
+    ("linkedin_url", "TEXT NOT NULL DEFAULT ''"),
+    ("work_history", "TEXT NOT NULL DEFAULT ''"),
+    ("education", "TEXT NOT NULL DEFAULT ''"),
+    ("skills", "TEXT NOT NULL DEFAULT ''"),
     ("plan", "TEXT NOT NULL DEFAULT 'free'"),
     ("slack_webhook_url", "TEXT NOT NULL DEFAULT ''"),
     ("telegram_chat_id", "TEXT NOT NULL DEFAULT ''"),
@@ -141,6 +162,23 @@ def _migrate_api_key_hash_to_device_keys(conn: sqlite3.Connection) -> None:
                 "INSERT INTO device_keys (user_id, key_hash) VALUES (?, ?)",
                 (row["id"], row["api_key_hash"]),
             )
+
+
+def _migrate_cv_text_to_profile(conn: sqlite3.Connection) -> None:
+    """One-time migration: rows from before the personal-profile split still have their
+    freeform CV/background text in the now-legacy `cv_text` column. Can't intelligently
+    split unstructured text into work history vs. education vs. skills, so it all moves
+    into work_history — the closest single bucket — leaving education/skills for the
+    user to fill in themselves. Legacy column is left in place afterward, unused; no-op
+    on a fresh install, which never has a `cv_text` column at all."""
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
+    if "cv_text" not in columns:
+        return
+    rows = conn.execute(
+        "SELECT id, cv_text FROM users WHERE work_history = '' AND cv_text != ''"
+    ).fetchall()
+    for row in rows:
+        conn.execute("UPDATE users SET work_history = ? WHERE id = ?", (row["cv_text"], row["id"]))
 
 
 def _create_unique_index(conn: sqlite3.Connection, name: str, column: str) -> None:
@@ -199,4 +237,5 @@ def init_db() -> None:
                 conn.execute(f"ALTER TABLE users ADD COLUMN {name} {coltype}")
         _backfill_api_key_hashes(conn)
         _migrate_api_key_hash_to_device_keys(conn)
+        _migrate_cv_text_to_profile(conn)
         _create_unique_index(conn, "idx_users_email", "email")
