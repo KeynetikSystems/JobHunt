@@ -121,13 +121,13 @@ ApplicationWindow {
 
                 Item { Layout.fillHeight: true }
 
-                Text {
-                    text: "London\nPE / VC / Impact / Consulting"
-                    color: slate
-                    font.pixelSize: 11
-                    wrapMode: Text.WordWrap
-                    Layout.preferredWidth: 150
-                }
+                // Text {
+                //     text: "London\nPE / VC / Impact / Consulting"
+                //     color: slate
+                //     font.pixelSize: 11
+                //     wrapMode: Text.WordWrap
+                //     Layout.preferredWidth: 150
+                // }
             }
         }
 
