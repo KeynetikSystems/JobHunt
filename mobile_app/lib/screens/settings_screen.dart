@@ -38,6 +38,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _alertsStatus = '';
   AccountStatus? _account;
   bool _notificationsEnabled = true;
+  // Personal Profile starts collapsed since it's the biggest section (7 fields,
+  // 3 multiline textareas) and adds the most scroll length; the rest default open.
+  final Map<String, bool> _sectionExpanded = {'Personal Profile': false};
 
   @override
   void initState() {
@@ -483,9 +486,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                           const SizedBox(height: 10),
                           _field('Full name', _fullNameCtrl),
-                          _field('Phone number', _phoneCtrl),
+                          _field('Phone number', _phoneCtrl, warningFor: _phoneWarning),
                           _field('Location / City', _locationCtrl),
-                          _field('LinkedIn / portfolio URL', _linkedinCtrl),
+                          _field('LinkedIn / portfolio URL', _linkedinCtrl, warningFor: _linkedinWarning),
                           _multilineField('Work history', _workHistoryCtrl, maxLines: 8),
                           _multilineField('Education', _educationCtrl, maxLines: 4),
                           _multilineField('Skills', _skillsCtrl, maxLines: 3),
@@ -556,6 +559,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// screen reads as distinct blocks (Account, Notifications, Backend, CV)
   /// instead of one undifferentiated scroll of headers and fields.
   Widget _sectionBox({required String title, required Widget child}) {
+    final expanded = _sectionExpanded[title] ?? true;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
@@ -566,9 +570,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(color: LedgerColors.parchment, fontFamily: 'Georgia', fontSize: 16)),
-          const SizedBox(height: 10),
-          child,
+          InkWell(
+            onTap: () => setState(() => _sectionExpanded[title] = !expanded),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 44),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(title,
+                        style: const TextStyle(color: LedgerColors.parchment, fontFamily: 'Georgia', fontSize: 16)),
+                  ),
+                  Icon(
+                    expanded ? Icons.expand_less : Icons.expand_more,
+                    color: LedgerColors.slate,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (expanded) ...[
+            const SizedBox(height: 10),
+            child,
+          ],
         ],
       ),
     );
@@ -589,7 +612,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _field(String label, TextEditingController ctrl, {String? hint}) {
+  Widget _field(String label, TextEditingController ctrl, {String? hint, String? Function(String)? warningFor}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
@@ -621,9 +644,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
+          if (warningFor != null)
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: ctrl,
+              builder: (context, value, _) {
+                final warning = warningFor(value.text);
+                if (warning == null) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(warning, style: const TextStyle(color: Colors.orangeAccent, fontSize: 11)),
+                );
+              },
+            ),
         ],
       ),
     );
+  }
+
+  /// Non-blocking — a malformed phone number is still saved (it's the user's own
+  /// data and only informs application forms filled out elsewhere), this just
+  /// surfaces the mismatch before it becomes a rejected form field, per the UX
+  /// critique that the old field gave no feedback until a form rejected it later.
+  static String? _phoneWarning(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return null;
+    final digits = trimmed.replaceAll(RegExp(r'[\s\-().]'), '');
+    if (!RegExp(r'^\+?[0-9]{7,15}$').hasMatch(digits)) {
+      return "Doesn't look like a valid phone number.";
+    }
+    return null;
+  }
+
+  static String? _linkedinWarning(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return null;
+    final uri = Uri.tryParse(trimmed);
+    final valid = uri != null && (uri.scheme == 'http' || uri.scheme == 'https') && uri.host.isNotEmpty;
+    if (!valid) {
+      return "Doesn't look like a valid URL — include https://";
+    }
+    return null;
   }
 
   Widget _multilineField(String label, TextEditingController ctrl, {required int maxLines}) {

@@ -14,7 +14,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('LEDGER'), findsOneWidget);
-    expect(find.text("Today's entries"), findsOneWidget);
+    expect(find.text('Your entries'), findsOneWidget);
     expect(find.byIcon(Icons.search), findsOneWidget);
   });
 

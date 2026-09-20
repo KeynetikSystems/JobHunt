@@ -2,6 +2,49 @@
 
 ## 2026-09-20
 
+### UX critique follow-up round 2: heading mismatch, History parity, validation, skeletons, collapsible Settings
+
+- **"Today's entries" heading was a mental-model mismatch** — that copy made sense when
+  Dashboard showed one daily scan; now it shows whatever was last searched, possibly
+  days-old and restored from local cache. Both apps now show "Your entries" when idle
+  and `Results for "<query>"` once a search has run — mobile via a new `_lastQuery`
+  state field, desktop via a new `lastQuery` `Property` on `DigestBackend` set from
+  `runSearch()`'s worker and cleared by `runScan()`.
+- **History had no filter/sort while Dashboard did, despite the same data shape** —
+  added All/Jobs/News filter chips and a seniority sort toggle to History on both
+  platforms, mirroring Dashboard's exact pattern. Mobile: extracted the shared
+  `FeedFilterChip` widget (was private to Dashboard) so both screens use identical
+  chip styling; History filters/sorts client-side over `HistoryItem.kind`/`.seniority`.
+  Desktop: added a `historyFilter`/`historySeniorityDescending` pair of `root`
+  properties and a computed `filteredHistory` list in `Main.qml`, plus a new
+  `seniorityRankOf()` `Slot` on `DigestBackend` so the QML sort doesn't duplicate the
+  Python-side `_SENIORITY_RANK` table.
+- **No format validation on Phone / LinkedIn URL profile fields** — someone could type
+  anything and only find out when an application form rejected it later. Added
+  non-blocking inline warnings (a regex/URI sanity check, not a save-blocking
+  validator — it's the user's own reference data) below both fields on both platforms:
+  mobile via a `warningFor` callback on the shared `_field()` helper, desktop via a new
+  `warning` property on `SettingsField.qml` driven by `phoneWarningFor()`/
+  `linkedinWarningFor()` functions on `root`.
+- **No loading skeletons during search** — a live Tavily+Groq round trip takes a few
+  real seconds with only a small spinner + one status line as feedback. Added pulsing
+  placeholder cards shown only on a first search/scan with no existing results yet
+  (existing results stay visible, uninterrupted, during a subsequent search). Mobile:
+  new `SkeletonCard` widget (`AnimationController`-driven opacity pulse, no new
+  dependency), inserted by `_buildFeedItems()` when `_busy` and the feed is empty.
+  Desktop: new `SkeletonCard.qml` (`SequentialAnimation on opacity`), added to the
+  jobs/news `PyInstaller`/build manifests (`Ledger.spec`, `pyproject.toml`,
+  `build-macos.yml`) alongside the other custom QML components.
+- **Settings was one long scroll per platform even with section boxes** — no
+  collapsing, so the 7-field/3-textarea Personal Profile section added real scroll
+  length on top of everything else. Both platforms' section containers
+  (`_sectionBox` / `SettingsSection.qml`) are now collapsible via a clickable header
+  with a chevron/triangle indicator; Personal Profile defaults collapsed (the biggest
+  section), the rest default expanded.
+
+Verified: `flutter analyze` and both widget tests clean (mobile); desktop verified via
+headless load + `qmllint` (zero errors) after every change.
+
 ### UX critique follow-up: fix 4 of 5 findings, correct the 5th
 
 - **Icon-only affordances relying on Tooltip alone** — mobile's seniority sort control

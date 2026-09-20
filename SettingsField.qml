@@ -8,6 +8,7 @@ ColumnLayout {
     property alias text: fieldInput.text
     property bool masked: false
     property string tooltip: ""
+    property string warning: ""
     property bool _revealed: false
     Layout.fillWidth: true
     spacing: 4
@@ -54,5 +55,14 @@ ColumnLayout {
                 font.pixelSize: 11
             }
         }
+    }
+
+    Text {
+        visible: control.warning.length > 0
+        text: control.warning
+        color: "#E2A33D"
+        font.pixelSize: 11
+        wrapMode: Text.WordWrap
+        Layout.fillWidth: true
     }
 }

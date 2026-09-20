@@ -22,6 +22,40 @@ ApplicationWindow {
 
     property string currentPage: "dashboard"
     property string feedFilter: "all"
+    property string historyFilter: "all"
+    property bool historySeniorityDescending: false
+
+    property var filteredHistory: {
+        var items = backend.history.filter(function(i) {
+            if (root.historyFilter === "jobs") return (i.kind || "job") !== "news"
+            if (root.historyFilter === "news") return i.kind === "news"
+            return true
+        })
+        if (root.historyFilter === "jobs") {
+            items = items.slice().sort(function(a, b) {
+                var ra = backend.seniorityRankOf(a.seniority || "")
+                var rb = backend.seniorityRankOf(b.seniority || "")
+                return root.historySeniorityDescending ? (rb - ra) : (ra - rb)
+            })
+        }
+        return items
+    }
+
+    // Non-blocking — a malformed value still saves (it's the user's own data,
+    // only informs forms filled out elsewhere); this just surfaces the mismatch
+    // before it becomes a rejected form field, mirroring the mobile app's check.
+    function phoneWarningFor(value) {
+        if (!value || value.trim().length === 0) return ""
+        var digits = value.replace(/[\s\-().]/g, "")
+        if (!/^\+?[0-9]{7,15}$/.test(digits)) return "Doesn't look like a valid phone number."
+        return ""
+    }
+
+    function linkedinWarningFor(value) {
+        if (!value || value.trim().length === 0) return ""
+        if (!/^https?:\/\/[^\s]+\.[^\s]+/.test(value.trim())) return "Doesn't look like a valid URL — include https://"
+        return ""
+    }
 
     RowLayout {
         anchors.fill: parent
@@ -150,10 +184,12 @@ ApplicationWindow {
                     ColumnLayout {
                         spacing: 4
                         Text {
-                            text: "Today's entries"
+                            text: backend.lastQuery.length > 0 ? "Results for \"" + backend.lastQuery + "\"" : "Your entries"
                             color: parchment
                             font.family: "Georgia"
                             font.pixelSize: 26
+                            elide: Text.ElideRight
+                            Layout.maximumWidth: 500
                         }
                         Text {
                             text: backend.dateLabel
@@ -387,8 +423,13 @@ ApplicationWindow {
                                 }
                             }
 
+                            Repeater {
+                                model: (backend.busy && backend.jobs.length === 0) ? 2 : 0
+                                delegate: SkeletonCard {}
+                            }
+
                             Text {
-                                visible: backend.jobs.length === 0
+                                visible: backend.jobs.length === 0 && !backend.busy
                                 text: "Nothing new yet. Run a scan to check for fresh listings."
                                 color: slate
                                 font.italic: true
@@ -491,8 +532,13 @@ ApplicationWindow {
                                 }
                             }
 
+                            Repeater {
+                                model: (backend.busy && backend.news.length === 0) ? 2 : 0
+                                delegate: SkeletonCard {}
+                            }
+
                             Text {
-                                visible: backend.news.length === 0
+                                visible: backend.news.length === 0 && !backend.busy
                                 text: "No notable news yet. Run a scan to check for updates."
                                 color: slate
                                 font.italic: true
@@ -586,6 +632,47 @@ ApplicationWindow {
                     font.pixelSize: 13
                 }
 
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    visible: backend.history.length > 0
+
+                    FilterChip {
+                        label: "All"
+                        selected: root.historyFilter === "all"
+                        onClicked: root.historyFilter = "all"
+                    }
+                    FilterChip {
+                        label: "Jobs (" + backend.history.filter(function(i) { return (i.kind || "job") !== "news" }).length + ")"
+                        selected: root.historyFilter === "jobs"
+                        onClicked: root.historyFilter = "jobs"
+                    }
+                    FilterChip {
+                        label: "News (" + backend.history.filter(function(i) { return i.kind === "news" }).length + ")"
+                        selected: root.historyFilter === "news"
+                        onClicked: root.historyFilter = "news"
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    Button {
+                        visible: root.historyFilter === "jobs" && root.filteredHistory.length > 0
+                        flat: true
+                        padding: 4
+                        hoverEnabled: true
+                        ToolTip.text: root.historySeniorityDescending ? "Seniority: senior first — click to reverse" : "Seniority: junior first — click to reverse"
+                        ToolTip.visible: hovered
+                        ToolTip.delay: 400
+                        onClicked: root.historySeniorityDescending = !root.historySeniorityDescending
+                        background: Rectangle { color: "transparent" }
+                        contentItem: Text {
+                            text: root.historySeniorityDescending ? "Seniority ↓" : "Seniority ↑"
+                            color: brass
+                            font.pixelSize: 11
+                        }
+                    }
+                }
+
                 ScrollView {
                     id: historyScroll
                     Layout.fillWidth: true
@@ -597,7 +684,7 @@ ApplicationWindow {
                         spacing: 10
 
                         Repeater {
-                            model: backend.history
+                            model: root.filteredHistory
                             delegate: HistoryCard {
                                 Layout.fillWidth: true
                                 kind: modelData.kind || "job"
@@ -614,6 +701,14 @@ ApplicationWindow {
                         Text {
                             visible: backend.history.length === 0
                             text: "Nothing here yet — items you email or dismiss will show up here."
+                            color: slate
+                            font.italic: true
+                            font.pixelSize: 12
+                        }
+
+                        Text {
+                            visible: backend.history.length > 0 && root.filteredHistory.length === 0
+                            text: "No " + (root.historyFilter === "jobs" ? "job" : "news") + " items in your history."
                             color: slate
                             font.italic: true
                             font.pixelSize: 12
@@ -770,6 +865,7 @@ ApplicationWindow {
                         SettingsSection {
                             title: "Personal Profile"
                             visible: backend.connected
+                            expanded: false
 
                             Text {
                                 text: "Used to draft tailored CV highlights and cover letters, and as a quick reference when filling out application forms elsewhere. Never sent anywhere except Groq, alongside the specific role you ask to draft for."
@@ -786,6 +882,7 @@ ApplicationWindow {
                             SettingsField {
                                 id: phoneField
                                 label: "Phone number"; text: backend.profile.phone || ""
+                                warning: root.phoneWarningFor(phoneField.text)
                             }
                             SettingsField {
                                 id: locationField
@@ -794,6 +891,7 @@ ApplicationWindow {
                             SettingsField {
                                 id: linkedinField
                                 label: "LinkedIn / portfolio URL"; text: backend.profile.linkedin_url || ""
+                                warning: root.linkedinWarningFor(linkedinField.text)
                             }
 
                             Text { text: "Work history"; color: slate; font.pixelSize: 12 }

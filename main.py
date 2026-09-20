@@ -71,6 +71,7 @@ class DigestBackend(QObject):
         self._account = {}
         self._status = "Ready."
         self._date_label = "No scan run yet"
+        self._last_query = ""
         self._busy = False
         self._backend_url = ""
         self._api_key = ""
@@ -114,6 +115,10 @@ class DigestBackend(QObject):
     @Property(str, notify=dateLabelChanged)
     def dateLabel(self):
         return self._date_label
+
+    @Property(str, notify=dateLabelChanged)
+    def lastQuery(self):
+        return self._last_query
 
     @Property(bool, notify=busyChanged)
     def busy(self):
@@ -311,6 +316,7 @@ class DigestBackend(QObject):
                 self._jobs = result.get("jobs", [])
                 self._news = result.get("news", [])
                 self._date_label = date.today().strftime("%A %d %B %Y")
+                self._last_query = ""
                 self.jobsChanged.emit()
                 self.newsChanged.emit()
                 self.dateLabelChanged.emit()
@@ -372,6 +378,12 @@ class DigestBackend(QObject):
         self._seniority_descending = not self._seniority_descending
         self.jobsChanged.emit()
 
+    @Slot(str, result=int)
+    def seniorityRankOf(self, seniority):
+        """Exposes _SENIORITY_RANK to QML so the History page can sort by seniority
+        the same way the Dashboard/jobs list already does, without duplicating the table."""
+        return _SENIORITY_RANK.get(seniority, 99)
+
     @Slot(str)
     def dismissItem(self, url):
         """Per-card dismiss — marks one item seen without emailing the whole digest, the
@@ -414,6 +426,7 @@ class DigestBackend(QObject):
                 self._jobs = result.get("jobs", [])
                 self._news = result.get("news", [])
                 self._date_label = date.today().strftime("%A %d %B %Y")
+                self._last_query = query
                 self.jobsChanged.emit()
                 self.newsChanged.emit()
                 self.dateLabelChanged.emit()

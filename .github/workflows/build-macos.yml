@@ -37,6 +37,7 @@ jobs:
             --add-data "ApplicationMaterialsPanel.qml:." \
             --add-data "FilterChip.qml:." \
             --add-data "SettingsSection.qml:." \
+            --add-data "SkeletonCard.qml:." \
             main.py
 
       - name: Verify binary architecture

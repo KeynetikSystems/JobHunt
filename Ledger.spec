@@ -12,6 +12,7 @@ a = Analysis(
         ('ApplicationMaterialsPanel.qml', '.'),
         ('FilterChip.qml', '.'),
         ('SettingsSection.qml', '.'),
+        ('SkeletonCard.qml', '.'),
     ],
     hiddenimports=[],
     hookspath=[],

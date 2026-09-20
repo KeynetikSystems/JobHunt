@@ -7,9 +7,11 @@ import '../models/news_item.dart';
 import '../notifications.dart';
 import '../theme.dart';
 import '../widgets/banner_ad_widget.dart';
+import '../widgets/feed_filter_chip.dart';
 import '../widgets/inline_ad_card.dart';
 import '../widgets/job_card.dart';
 import '../widgets/news_card.dart';
+import '../widgets/skeleton_card.dart';
 
 const _weekdays = [
   'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
@@ -179,9 +181,11 @@ class DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                    "Today's entries",
-                    style: TextStyle(
+                  Text(
+                    _lastQuery.isEmpty ? 'Your entries' : 'Results for "$_lastQuery"',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
                       color: LedgerColors.parchment,
                       fontFamily: 'Georgia',
                       fontSize: 24,
@@ -244,9 +248,21 @@ class DashboardScreenState extends State<DashboardScreen> {
             child: Wrap(
               spacing: 8,
               children: [
-                _filterChip('All', _FeedFilter.all),
-                _filterChip('Jobs (${_jobs.length})', _FeedFilter.jobs),
-                _filterChip('News (${_news.length})', _FeedFilter.news),
+                FeedFilterChip(
+                  label: 'All',
+                  selected: _filter == _FeedFilter.all,
+                  onSelected: () => setState(() => _filter = _FeedFilter.all),
+                ),
+                FeedFilterChip(
+                  label: 'Jobs (${_jobs.length})',
+                  selected: _filter == _FeedFilter.jobs,
+                  onSelected: () => setState(() => _filter = _FeedFilter.jobs),
+                ),
+                FeedFilterChip(
+                  label: 'News (${_news.length})',
+                  selected: _filter == _FeedFilter.news,
+                  onSelected: () => setState(() => _filter = _FeedFilter.news),
+                ),
               ],
             ),
           ),
@@ -267,23 +283,6 @@ class DashboardScreenState extends State<DashboardScreen> {
             ),
         ],
       ),
-    );
-  }
-
-  Widget _filterChip(String label, _FeedFilter value) {
-    final selected = _filter == value;
-    return ChoiceChip(
-      label: Text(
-        label,
-        style: TextStyle(fontSize: 11, color: selected ? LedgerColors.inkBg : LedgerColors.parchment),
-      ),
-      selected: selected,
-      onSelected: (_) => setState(() => _filter = value),
-      selectedColor: LedgerColors.brass,
-      backgroundColor: LedgerColors.inkPanel,
-      side: const BorderSide(color: LedgerColors.hairline),
-      visualDensity: VisualDensity.compact,
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     );
   }
 
@@ -342,7 +341,11 @@ class DashboardScreenState extends State<DashboardScreen> {
     }
 
     if (items.isEmpty) {
-      items.add(_emptyState());
+      if (_busy) {
+        items.addAll(const [SkeletonCard(), SkeletonCard(), SkeletonCard()]);
+      } else {
+        items.add(_emptyState());
+      }
     }
     return items;
   }
