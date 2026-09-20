@@ -35,6 +35,8 @@ jobs:
             --add-data "SettingsField.qml:." \
             --add-data "HistoryCard.qml:." \
             --add-data "ApplicationMaterialsPanel.qml:." \
+            --add-data "FilterChip.qml:." \
+            --add-data "SettingsSection.qml:." \
             main.py
 
       - name: Verify binary architecture

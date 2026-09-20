@@ -2,4 +2,4 @@
 name = "JobHuntAI"
 
 [tool.pyside6-project]
-files = ["main.py", "Main.qml", "SettingsField.qml", "HistoryCard.qml", "ApplicationMaterialsPanel.qml", "digest_engine.py", "config.py", "send_report.py"]
+files = ["main.py", "Main.qml", "SettingsField.qml", "HistoryCard.qml", "ApplicationMaterialsPanel.qml", "FilterChip.qml", "SettingsSection.qml", "backend_client.py", "config.py"]
