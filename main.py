@@ -25,7 +25,7 @@ from config import load_env, save_env
 
 # Rank used to sort jobs by seniority — lower is more junior, matching the mobile
 # app's seniorityRankOf(). Anything unrecognized sorts last.
-_DEFAULT_BACKEND_URL = "https://jobhunt-production-bae5.up.railway.app"
+_DEFAULT_BACKEND_URL = "https://api.keynetiksystems.com"
 
 _SENIORITY_RANK = {
     "Graduate/Intern": 0,
