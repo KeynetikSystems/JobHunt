@@ -48,3 +48,7 @@ app.*.map.json
 /android/app/release
 .flutter-pub-cache/
 .gradle-home/
+
+# Release signing — never commit the upload keystore or its passwords.
+android/app/upload-keystore.jks
+android/key.properties
