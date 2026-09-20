@@ -207,7 +207,7 @@ class DashboardScreenState extends State<DashboardScreen> {
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'Swipe a card left to dismiss it — it won\'t show up again.',
+                    'Swipe a card left (or tap ✕) to dismiss it — it won\'t show up again.',
                     style: TextStyle(color: LedgerColors.slate, fontSize: 11, fontStyle: FontStyle.italic),
                   ),
                   const SizedBox(height: 8),
@@ -300,7 +300,7 @@ class DashboardScreenState extends State<DashboardScreen> {
             direction: DismissDirection.endToStart,
             background: _dismissBackground(),
             onDismissed: (_) => _dismissJob(job),
-            child: JobCard(job: job),
+            child: _withDismissButton(JobCard(job: job), () => _dismissJob(job)),
           ),
         );
         if ((i + 1) % 4 == 0) items.add(const InlineAdCard());
@@ -316,7 +316,7 @@ class DashboardScreenState extends State<DashboardScreen> {
             direction: DismissDirection.endToStart,
             background: _dismissBackground(),
             onDismissed: (_) => _dismissNews(item),
-            child: NewsCard(news: item),
+            child: _withDismissButton(NewsCard(news: item), () => _dismissNews(item)),
           ),
         );
         if ((i + 1) % 4 == 0) items.add(const InlineAdCard());
@@ -482,6 +482,36 @@ class DashboardScreenState extends State<DashboardScreen> {
         border: Border.all(color: LedgerColors.slate),
       ),
       child: const Icon(Icons.close, color: LedgerColors.parchment),
+    );
+  }
+
+  /// Overlays an explicit dismiss button on top of a card, on top of the swipe gesture
+  /// Dismissible already provides. Swipe-to-dismiss is a well-known touch convention but
+  /// has no discoverable affordance for a mouse/trackpad user on desktop — this gives
+  /// desktop (and anyone who prefers it on mobile) a visible way to do the same thing.
+  /// Calls the dismiss handler directly rather than routing through Dismissible's own
+  /// drag-completion animation; removing the item from the underlying list is enough for
+  /// Dismissible to unmount cleanly either way.
+  Widget _withDismissButton(Widget card, VoidCallback onDismiss) {
+    return Stack(
+      children: [
+        card,
+        Positioned(
+          top: 6,
+          right: 6,
+          child: Tooltip(
+            message: 'Dismiss',
+            child: InkWell(
+              onTap: onDismiss,
+              borderRadius: BorderRadius.circular(12),
+              child: const Padding(
+                padding: EdgeInsets.all(4),
+                child: Icon(Icons.close, size: 16, color: LedgerColors.slate),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
