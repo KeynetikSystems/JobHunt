@@ -18,7 +18,6 @@ DB_PATH = Path(os.environ.get("DB_PATH", str(Path(__file__).parent / "backend.db
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    api_key_hash TEXT UNIQUE NOT NULL,
     email TEXT UNIQUE NOT NULL,
     email_verified INTEGER NOT NULL DEFAULT 0,
     verify_token TEXT,
@@ -26,6 +25,17 @@ CREATE TABLE IF NOT EXISTS users (
     plan TEXT NOT NULL DEFAULT 'free',
     slack_webhook_url TEXT NOT NULL DEFAULT '',
     telegram_chat_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- One row per connected device/app-install, not per account — an account can have
+-- many. Registering a new device for an already-verified account adds a row here
+-- rather than replacing one, so e.g. mobile and desktop can both stay connected to
+-- the same account at once instead of each new connection logging the others out.
+CREATE TABLE IF NOT EXISTS device_keys (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    key_hash TEXT UNIQUE NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -87,18 +97,19 @@ _USERS_MIGRATIONS = [
     # default new users to 0, requiring verification from day one.
     ("email_verified", "INTEGER NOT NULL DEFAULT 1"),
     ("verify_token", "TEXT"),
-    # Existing rows still have their real key in the old plaintext `api_key` column
-    # (kept, unused otherwise) until _backfill_api_key_hashes() below hashes it in.
+    # Legacy step-stone column — existing rows' real key moves from plaintext `api_key`
+    # through here and into device_keys (see _backfill_api_key_hashes() and
+    # _migrate_api_key_hash_to_device_keys() below). Left in place afterward, unused.
     ("api_key_hash", "TEXT"),
 ]
 
 
 def _backfill_api_key_hashes(conn: sqlite3.Connection) -> None:
-    """One-time migration: existing rows from before API keys were hashed still have
-    their real key in the old plaintext `api_key` column and no `api_key_hash` yet.
-    Hashes it in place so require_user() can look up by hash for every row, old or new.
-    No-op on a fresh install (SCHEMA already only has api_key_hash, so `api_key` won't
-    exist as a column and PRAGMA table_info won't list it)."""
+    """One-time migration: rows from before API keys were hashed still have their real
+    key in the old plaintext `api_key` column and no `api_key_hash` yet. Hashes it in
+    place — a stepping stone for _migrate_api_key_hash_to_device_keys() below, which
+    does the actual move to the per-device table. No-op on a fresh install or one that's
+    already past this point (no `api_key` column left to read)."""
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
     if "api_key" not in columns:
         return
@@ -108,6 +119,28 @@ def _backfill_api_key_hashes(conn: sqlite3.Connection) -> None:
     for row in rows:
         key_hash = hashlib.sha256(row["api_key"].encode("utf-8")).hexdigest()
         conn.execute("UPDATE users SET api_key_hash = ? WHERE id = ?", (key_hash, row["id"]))
+
+
+def _migrate_api_key_hash_to_device_keys(conn: sqlite3.Connection) -> None:
+    """One-time migration: rows from before per-device keys existed have their one key
+    in the now-legacy `users.api_key_hash` column (itself populated either originally,
+    or just now by _backfill_api_key_hashes() above). Copies it into device_keys so that
+    whatever device is already using it keeps working under the new per-device model.
+    The legacy column is left in place afterward, harmlessly unused — no-op on a fresh
+    install, which never has an `api_key_hash` column on `users` at all."""
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
+    if "api_key_hash" not in columns:
+        return
+    rows = conn.execute("SELECT id, api_key_hash FROM users WHERE api_key_hash IS NOT NULL").fetchall()
+    for row in rows:
+        exists = conn.execute(
+            "SELECT 1 FROM device_keys WHERE key_hash = ?", (row["api_key_hash"],)
+        ).fetchone()
+        if not exists:
+            conn.execute(
+                "INSERT INTO device_keys (user_id, key_hash) VALUES (?, ?)",
+                (row["id"], row["api_key_hash"]),
+            )
 
 
 def _create_unique_index(conn: sqlite3.Connection, name: str, column: str) -> None:
@@ -165,5 +198,5 @@ def init_db() -> None:
             if name not in existing_users:
                 conn.execute(f"ALTER TABLE users ADD COLUMN {name} {coltype}")
         _backfill_api_key_hashes(conn)
+        _migrate_api_key_hash_to_device_keys(conn)
         _create_unique_index(conn, "idx_users_email", "email")
-        _create_unique_index(conn, "idx_users_api_key_hash", "api_key_hash")

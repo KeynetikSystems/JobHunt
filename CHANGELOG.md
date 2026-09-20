@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-09-20
+
+### Fix: single-key-per-account model broke multi-device use
+
+Direct regression from the account-recovery fix in the 2026-09-19 hardening pass below:
+connecting a second device (e.g. desktop, after already being connected on mobile) with
+the same email overwrote the one `users.api_key_hash` column, silently invalidating the
+first device's key on its very next request — no warning, just a 401.
+
+Moved API keys off the `users` row entirely, into a new `device_keys` table (one row per
+connected device, many-to-one with a user). Registering a new device for an
+already-verified account now adds a key instead of replacing one, so mobile and desktop
+(or any number of devices) can stay connected to the same account simultaneously. The
+security property the recovery fix actually cared about is untouched: a new key for a
+verified account is still only ever delivered by email, never returned over HTTP, so a
+non-owner still can't obtain a working key just by knowing the address.
+
+`backend/auth.py`'s `require_user` now joins `device_keys` instead of reading
+`users.api_key_hash` directly. Existing installs get a two-step migration
+(`db._migrate_api_key_hash_to_device_keys`, on top of the existing plaintext→hash
+backfill) so whichever key a device is already using keeps working under the new model.
+No client-side changes needed — the `/api/register` response shape is unchanged.
+
+Verified live against an isolated backend (separate `DB_PATH` **and** stubbed
+`TAVILY_API_KEY`/`GROQ_API_KEY`, per the credentials-isolation lesson from the earlier
+incident): confirmed a second device registering doesn't invalidate the first, and
+separately simulated a legacy pre-fix row and confirmed its key survives the migration
+on server restart.
+
+**Also found, not yet fixed**: `PUT /api/alerts` accepts any string for
+`slack_webhook_url` with zero validation, and the server POSTs to it directly and
+repeatedly (every scan refresh). A real SSRF hole — a malicious value pointing at an
+internal address would have the server hit it on a schedule. See `DESIGN.md`.
+
 ## 2026-09-19
 
 ### Release-readiness hardening

@@ -115,7 +115,10 @@ drift):
 Auth is one header (`X-API-Key`), one SQLite lookup (`backend/auth.py`) — no session,
 no OAuth. `require_user` vs `require_verified_user` is the only access-control axis
 today; there's no per-plan route gating beyond the caps enforced inline in each handler.
-API keys are looked up by SHA-256 hash (`users.api_key_hash`), never stored raw.
+API keys are looked up by SHA-256 hash, one row per connected *device* in `device_keys`
+(not per account) — an account can have several, so mobile and desktop can both stay
+connected to the same account at once. See "Dedup" above for the parallel reason
+per-user state lives in its own table rather than on `users` directly.
 
 ## Known gaps and risks (as of 2026-09-19)
 
@@ -134,10 +137,27 @@ API keys are looked up by SHA-256 hash (`users.api_key_hash`), never stored raw.
   misconfigured volume shows up in the deploy logs instead of silently wiping data on
   the next redeploy. Still worth an explicit one-time check of the Railway dashboard —
   the warning only fires if the app has actually started once to log it.
+- ~~Single key per account broke multi-device use~~ — a direct side effect of the
+  account-recovery fix above: connecting a second device (e.g. desktop after mobile)
+  used to overwrite the one `api_key_hash` column, silently logging the first device
+  out. Moved to `device_keys`, one row per connected device — registering a new device
+  now adds a key instead of replacing one. The security property that actually mattered
+  is unaffected: a new key is still only ever delivered by email for a verified
+  account, never returned over HTTP, so a non-owner still can't obtain one just by
+  knowing the address.
 
 **Still open:**
 - **No real billing.** Plan upgrades are a manual review of `/api/upgrade-request`
   entries. This is the ceiling on monetizing everything else in the system.
+- **No per-device visibility or revocation.** Multi-device now *works*, but a user
+  still can't see "these are my connected devices" or kill access to one lost phone
+  without regenerating a key everywhere. The fuller version of `device_keys`, for later.
+- **No key expiry.** A device key is valid forever until the account re-registers
+  (which now only affects that flow's own new key, not other devices).
+- **No account deletion or data export.** Nothing lets a user delete their account or
+  pull their own data today — would require manually running SQL. Worth real attention
+  if this ever has EU/UK (GDPR) or California (CCPA) users, given it stores email and
+  CV/background text.
 - **No per-user saved query lists on the backend.** Desktop used to have a local raw
   query-list editor (removed in the hosted-backend migration); the backend only offers
   the one shared default set plus ad-hoc single-query search. If that flexibility is
@@ -145,6 +165,12 @@ API keys are looked up by SHA-256 hash (`users.api_key_hash`), never stored raw.
   per-client hack.
 - **Legal docs (`PRIVACY.md`/`TERMS.md`) haven't been reviewed** for actual legal
   adequacy by anyone — separate from the engineering checklist entirely.
+- **SSRF via user-supplied Slack webhook URL.** `PUT /api/alerts` accepts any string for
+  `slack_webhook_url` with no validation, and the server POSTs to it directly and
+  repeatedly (every scan refresh) via `alerts.send_slack_alert`. A malicious value
+  pointing at an internal address would have the server make that request on a
+  schedule. Found during a security review; not yet fixed. Small fix: validate
+  `https://` scheme + restrict host to `hooks.slack.com` before storing.
 - **Desktop still lacks** premium Slack/Telegram alerts config and Privacy/Terms links
   in Settings — found during a mobile/desktop parity re-check, not addressed yet.
 

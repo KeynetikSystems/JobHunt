@@ -386,8 +386,10 @@ def register(body: RegisterRequest, request: Request):
     accounts, or have digests emailed to someone who never asked for them.
 
     email is UNIQUE, so registering an address that already exists doesn't create a
-    second, orphaned account — it recovers the existing one instead:
-    - Not yet verified: nothing sensitive is protected yet, so this just re-issues a
+    second, orphaned account — it recovers the existing one instead. Either way, this
+    adds a new row to device_keys rather than replacing an existing one, so connecting
+    a second device (e.g. desktop after mobile) doesn't log the first one out:
+    - Not yet verified: nothing sensitive is protected yet, so this just issues another
       key and resends verification, exactly as if it were a first registration.
     - Already verified: a real account with real data is at stake, so the new key is
       never returned in this response (anyone who merely knows the email could ask for
@@ -399,8 +401,8 @@ def register(body: RegisterRequest, request: Request):
         api_key = auth.generate_api_key()
         with db.get_db() as conn:
             conn.execute(
-                "UPDATE users SET api_key_hash = ? WHERE id = ?",
-                (auth.hash_api_key(api_key), existing["id"]),
+                "INSERT INTO device_keys (user_id, key_hash) VALUES (?, ?)",
+                (existing["id"], auth.hash_api_key(api_key)),
             )
         try:
             _send_recovery_email(body.email, api_key)
@@ -412,15 +414,18 @@ def register(body: RegisterRequest, request: Request):
     verify_token = auth.generate_verify_token()
     with db.get_db() as conn:
         if existing:
-            conn.execute(
-                "UPDATE users SET api_key_hash = ?, verify_token = ? WHERE id = ?",
-                (auth.hash_api_key(api_key), verify_token, existing["id"]),
-            )
+            user_id = existing["id"]
+            conn.execute("UPDATE users SET verify_token = ? WHERE id = ?", (verify_token, user_id))
         else:
-            conn.execute(
-                "INSERT INTO users (api_key_hash, email, verify_token) VALUES (?, ?, ?)",
-                (auth.hash_api_key(api_key), body.email, verify_token),
+            cursor = conn.execute(
+                "INSERT INTO users (email, verify_token) VALUES (?, ?)",
+                (body.email, verify_token),
             )
+            user_id = cursor.lastrowid
+        conn.execute(
+            "INSERT INTO device_keys (user_id, key_hash) VALUES (?, ?)",
+            (user_id, auth.hash_api_key(api_key)),
+        )
     verify_url = f"{str(request.base_url).rstrip('/')}/api/verify?token={verify_token}"
     try:
         _send_verification_email(body.email, verify_url)
