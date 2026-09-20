@@ -8,7 +8,7 @@ assistant.
 
 ## System shape
 
-One core pipeline, four surfaces:
+One core pipeline, three surfaces:
 
 ```
                     ┌─────────────────┐
@@ -18,26 +18,27 @@ One core pipeline, four surfaces:
                     │  Tavily/Groq)     │
                     └────────┬─────────┘
                              │
-              ┌──────────────┼──────────────────┐
-              │              │                  │
-      ┌───────▼──────┐ ┌─────▼──────┐  ┌────────▼────────┐
-      │ backend/app.py│ │ Headless   │  │  (desktop used   │
-      │ FastAPI,       │ │ runner     │  │  to call this    │
-      │ hosted keys,   │ │ (GitHub    │  │  directly — see  │
-      │ multi-user     │ │ Actions)   │  │  "Desktop" below)│
-      └───────┬────────┘ └────────────┘  └──────────────────┘
-              │
-       ┌──────┴──────┐
-       │             │
-┌──────▼─────┐ ┌─────▼──────┐
-│ Mobile app  │ │ Desktop app │
-│ (Flutter)   │ │ (PySide6/QML)│
-└─────────────┘ └─────────────┘
+                    ┌────────┴────────┐
+                    │                 │
+            ┌───────▼──────┐   ┌──────▼─────┐
+            │ backend/app.py│   │ Headless   │
+            │ FastAPI,       │   │ runner     │
+            │ hosted keys,   │   │ (GitHub    │
+            │ multi-user     │   │ Actions)   │
+            └───────┬────────┘   └────────────┘
+                    │
+            ┌───────▼────────┐
+            │ mobile_app/     │
+            │ (Flutter — one  │
+            │ codebase, mobile│
+            │ + desktop)      │
+            └─────────────────┘
 ```
 
-Mobile and desktop are both now thin HTTP clients of `backend/app.py`. Neither holds
-Tavily/Groq/SMTP credentials; both authenticate with a per-user API key from
-`/api/register`. This wasn't always true — see "Desktop's architecture" below.
+The Flutter client is a thin HTTP client of `backend/app.py`, for both mobile and
+desktop builds — it holds no Tavily/Groq/Resend credentials, only a per-user API key from
+`/api/register`. This wasn't always true for desktop specifically — see "Desktop's
+architecture" below for the history (a separate PySide6/QML app, since retired).
 
 ## Core design decisions
 
@@ -60,17 +61,20 @@ treatment, or it reintroduces per-user cost scaling.
 
 ### Hosted keys, not BYO keys
 
-The backend holds one operator-owned set of Tavily/Groq/SMTP/Telegram credentials.
+The backend holds one operator-owned set of Tavily/Groq/Resend/Telegram credentials.
 Clients never see them. This is what makes metering, plan tiers, and per-user caps
-possible at all — a BYO-key client (which desktop used to be) can't be metered, because
-there's no server in the loop to enforce anything.
+possible at all — a BYO-key client (which the original desktop app used to be) can't be
+metered, because there's no server in the loop to enforce anything.
 
-**Desktop's architecture** changed on 2026-09-19 for exactly this reason: it used to run
-`digest_engine.py` in-process with the user's own keys (unmetered, separate product from
-mobile in every way that mattered). It's now a client of the same backend mobile uses,
-via `backend_client.py`. See `feature/desktop-hosted-backend` (not yet merged to `main`
-— check memory or `git branch -a` before assuming this is live) and
-[CHANGELOG.md](CHANGELOG.md) for the full list of what that changed.
+**Desktop's architecture** (historical — the original desktop app was a separate
+PySide6/QML app, not the current Flutter one). It changed on 2026-09-19 for exactly this
+reason: it used to run `digest_engine.py` in-process with the user's own keys (unmetered,
+separate product from mobile in every way that mattered), then became a client of the
+same backend mobile uses. It was retired entirely on 2026-09-21 in favor of Flutter's own
+desktop build targets, so there's now one client codebase instead of two — its final
+state is archived at
+[KeynetikSystems/Ledger-qml-archive](https://github.com/KeynetikSystems/Ledger-qml-archive).
+See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
 ### Dedup: two different mechanisms depending on who's asking
 
@@ -171,8 +175,9 @@ per-user state lives in its own table rather than on `users` directly.
   pointing at an internal address would have the server make that request on a
   schedule. Found during a security review; not yet fixed. Small fix: validate
   `https://` scheme + restrict host to `hooks.slack.com` before storing.
-- **Desktop still lacks** premium Slack/Telegram alerts config and Privacy/Terms links
-  in Settings — found during a mobile/desktop parity re-check, not addressed yet.
+- ~~Desktop lacks premium Slack/Telegram alerts config and Privacy/Terms links~~ — moot
+  after the QML desktop app's retirement (2026-09-21): the Flutter app's Settings screen,
+  which already has both, is now what ships on desktop too.
 
 ## Open product questions
 
@@ -181,7 +186,8 @@ per-user state lives in its own table rather than on `users` directly.
   search for anything, which quietly broadens the addressable market — this was an
   incidental engineering consequence, not a deliberate repositioning decision. Worth a
   real conversation before leaning into or constraining it further.
-- **Desktop's long-term fate.** It's now feature-equivalent to mobile via the hosted
-  backend, but two separate client codebases (Dart/Flutter and Python/QML) still need
-  independent maintenance for the same feature set. Whether that's worth it depends on
-  whether desktop actually has meaningfully different users than mobile.
+- ~~Desktop's long-term fate~~ — resolved 2026-09-21: the separate PySide6/QML desktop
+  app was retired in favor of Flutter's own desktop build targets (Windows/macOS/Linux),
+  so there's one client codebase instead of two. The QML app's final state is archived
+  at [KeynetikSystems/Ledger-qml-archive](https://github.com/KeynetikSystems/Ledger-qml-archive).
+  Desktop ads still need gating behind premium in the Flutter codebase (mirrors mobile).

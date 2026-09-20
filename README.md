@@ -5,18 +5,21 @@ London), summarizes them with an LLM, and delivers them as a digest — by email
 desktop app, or in a mobile app.
 
 Both a History page (every job/news item ever emailed or dismissed) and AI-assisted
-"Draft CV highlights & cover letter" drafting are live on `main` in all three clients
-(desktop, mobile, backend) — these were originally built on separate feature branches,
-now merged.
+"Draft CV highlights & cover letter" drafting are live on `main` in every client.
 
-The project has four moving parts that all sit on top of one shared pipeline:
+The project's separate PySide6/QML desktop app was retired in favor of building the
+Flutter client for desktop too — its code (last state: feature-equivalent to mobile,
+hosted-keys architecture) is preserved at
+[KeynetikSystems/Ledger-qml-archive](https://github.com/KeynetikSystems/Ledger-qml-archive)
+for history, not deleted outright.
+
+The project has three moving parts that all sit on top of one shared pipeline:
 
 | Surface | What it is | Where |
 |---|---|---|
 | Core pipeline | Search → summarize → dedupe → email/store | [`digest_engine.py`](digest_engine.py) |
-| Desktop app | PySide6/QML GUI, hosted keys (client of the backend) | [`main.py`](main.py), [`Main.qml`](Main.qml) |
 | Backend | Multi-user FastAPI service, hosted keys | [`backend/`](backend/) |
-| Mobile app | Flutter client for the backend | [`mobile_app/`](mobile_app/) |
+| Mobile/desktop app | Flutter client for the backend (all platforms) | [`mobile_app/`](mobile_app/) |
 | Headless runner | Scheduled digest via GitHub Actions | [`.github/workflows/`](.github/workflows/) |
 
 ## How the pipeline works
@@ -46,25 +49,7 @@ of this:
 All local state (`seen_items.json`, `history.json`, `queries.json`, `cv.txt`, `.env`) is
 gitignored — it's per-installation data, not project source. This local state is only
 actually used by whatever runs `digest_engine.py` in-process — the backend server (for
-the shared scan) and the headless runner. The desktop app no longer does; see below.
-
-## Desktop app (JobHuntAI / "Ledger")
-
-A PySide6/QML GUI client of the backend — the same hosted-keys architecture the mobile
-app uses. It used to run `digest_engine.py` in-process with the user's own Tavily/Groq/
-SMTP keys; that mode was removed so desktop users share the operator's keys and the same
-free/premium caps as mobile, instead of being an unmetered, separate product. Connect to
-your backend from the Settings page (Backend URL + email) — no local `.env` editing
-needed for this anymore.
-
-```bash
-pip install -r requirements-desktop.txt
-python main.py
-```
-
-Screens: Dashboard, History, Settings (connect/account/CV) — feature-equivalent to the
-mobile app, via [`Main.qml`](Main.qml), [`HistoryCard.qml`](HistoryCard.qml),
-[`ApplicationMaterialsPanel.qml`](ApplicationMaterialsPanel.qml).
+the shared scan) and the headless runner.
 
 ## Backend (multi-user, hosted keys)
 
@@ -103,11 +88,13 @@ Routes: `GET /api/health`, `POST /api/register`, `GET /api/verify`,
 `POST /api/dismiss`, `GET /api/me`, `GET /api/history`, `GET/PUT /api/profile`,
 `POST /api/materials`, `GET/PUT /api/alerts`, `POST /api/upgrade-request`.
 
-## Mobile app
+## Mobile/desktop app
 
-Flutter client for the backend, living in [`mobile_app/`](mobile_app/). Talks to
-`backend/app.py` via [`api_client.dart`](mobile_app/lib/api_client.dart) using the
-per-user API key from `/api/register`; never holds Tavily/Groq/SMTP credentials itself.
+Flutter client for the backend, living in [`mobile_app/`](mobile_app/) — the only
+client now, builds for mobile and desktop (Windows/macOS/Linux) from one codebase.
+Talks to `backend/app.py` via [`api_client.dart`](mobile_app/lib/api_client.dart) using
+the per-user API key from `/api/register`; never holds Tavily/Groq/SMTP credentials
+itself.
 
 Screens: Dashboard ([`dashboard_screen.dart`](mobile_app/lib/screens/dashboard_screen.dart)),
 History ([`history_screen.dart`](mobile_app/lib/screens/history_screen.dart)), Settings
@@ -138,12 +125,11 @@ the headless scripts (`digest_engine.py`, `config.py`, `send_report.py`,
 ```
 digest_engine.py       Core pipeline — search, summarize, dedupe, history, application materials
 config.py               .env loading, project ROOT
-send_report.py          SMTP delivery
+send_report.py          Resend HTTP API email delivery
 build_archive.py        GitHub Pages archive builder
-main.py, *.qml           Desktop app (PySide6/QML)
 backend/                 FastAPI multi-user backend (app.py, db.py, auth.py)
-mobile_app/              Flutter mobile client
-.github/workflows/       Scheduled digest + macOS build CI
+mobile_app/              Flutter client — mobile and desktop
+.github/workflows/       Scheduled digest CI
 reports/, docs/          Generated HTML digests / GitHub Pages archive (not hand-edited)
 ```
 
@@ -155,10 +141,14 @@ Product direction discussed alongside this codebase, for whoever picks this up n
   custom searches/history/AI drafts; premium = scheduled auto-scans pushed via
   Slack/Telegram, unlimited custom search, unlimited AI-assisted application materials,
   and full history. AI-assisted application materials (CV highlights/cover letter) and
-  custom search are live on all three clients (desktop, mobile, backend), not
-  desktop-only or premium-only — the caps are what actually differ by plan.
-- ~~BYO-key vs. hosted-key tension~~ — resolved: the desktop app was migrated onto the
-  hosted backend (see [main.py](main.py)/[backend_client.py](backend_client.py)) instead
-  of calling `digest_engine.py` in-process, so it's metered and gated by plan exactly
-  like mobile now. What's still genuinely missing is real billing (Stripe/Paddle) to act
-  on that metering — plan upgrades are still a manual review of `/api/upgrade-request`.
+  custom search are live on both clients (Flutter, backend), not premium-only — the caps
+  are what actually differ by plan.
+- ~~BYO-key vs. hosted-key tension~~ — resolved: the original desktop app was migrated
+  onto the hosted backend instead of calling `digest_engine.py` in-process, so it was
+  metered and gated by plan exactly like mobile. What's still genuinely missing is real
+  billing (Stripe/Paddle or platform in-app purchases) to act on that metering — plan
+  upgrades are still a manual review of `/api/upgrade-request`.
+- ~~Two separate client codebases (Dart/Flutter, Python/QML)~~ — resolved: the PySide6/
+  QML desktop app was retired in favor of Flutter's own desktop build targets, so there's
+  one client codebase for mobile and desktop. The QML app's final state is archived at
+  [KeynetikSystems/Ledger-qml-archive](https://github.com/KeynetikSystems/Ledger-qml-archive).

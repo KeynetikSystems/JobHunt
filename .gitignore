@@ -6,9 +6,6 @@ __pycache__/
 build/
 dist/
 *.spec
-# Ledger.spec is hand-maintained (lists which QML files ship with the Windows/local
-# PyInstaller build) — not a throwaway pyi-makespec artifact, so it's tracked.
-!Ledger.spec
 reports/
 seen_items.json
 queries.json
