@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../api_client.dart';
 import '../error_utils.dart';
 import '../local_store.dart';
+import '../models/account_status.dart';
 import '../models/job_listing.dart';
 import '../models/news_item.dart';
 import '../notifications.dart';
@@ -51,11 +52,13 @@ class DashboardScreenState extends State<DashboardScreen> {
   List<String> _recentSearches = [];
   _FeedFilter _filter = _FeedFilter.all;
   bool _seniorityDescending = false;
+  AccountStatus? _account;
 
   @override
   void initState() {
     super.initState();
     _restore();
+    _loadAccountStatus();
   }
 
   @override
@@ -65,7 +68,25 @@ class DashboardScreenState extends State<DashboardScreen> {
   }
 
   /// Public so Settings can nudge the Dashboard to reflect a fresh connection.
-  void onConnectionChanged() => setState(() {});
+  void onConnectionChanged() {
+    _loadAccountStatus();
+    setState(() {});
+  }
+
+  /// Best-effort — ads just show (the safe default) if this fails or the user
+  /// isn't connected, same as if plan were unknown.
+  Future<void> _loadAccountStatus() async {
+    if (!ApiClient.instance.isConnected) {
+      if (mounted) setState(() => _account = null);
+      return;
+    }
+    try {
+      final account = await ApiClient.instance.me();
+      if (mounted) setState(() => _account = account);
+    } catch (_) {
+      // Leave _account as-is — a transient fetch failure shouldn't flip ads on/off.
+    }
+  }
 
   /// Restores the last search's results and recent-search history from disk,
   /// so the Dashboard isn't a blank slate on every app restart.
@@ -232,7 +253,7 @@ class DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           _buildSearchBar(),
-          const BannerAdWidget(),
+          if (_account?.isPremium != true) const BannerAdWidget(),
         ],
       ),
     );
@@ -288,6 +309,7 @@ class DashboardScreenState extends State<DashboardScreen> {
 
   List<Widget> _buildFeedItems() {
     final items = <Widget>[];
+    final showAds = _account?.isPremium != true;
     final sortedJobs = [..._jobs]..sort((a, b) => _seniorityDescending
         ? seniorityRankOf(b.seniority).compareTo(seniorityRankOf(a.seniority))
         : seniorityRankOf(a.seniority).compareTo(seniorityRankOf(b.seniority)));
@@ -304,7 +326,7 @@ class DashboardScreenState extends State<DashboardScreen> {
             child: _withDismissButton(JobCard(job: job), () => _dismissJob(job)),
           ),
         );
-        if ((i + 1) % 4 == 0) items.add(const InlineAdCard());
+        if (showAds && (i + 1) % 4 == 0) items.add(const InlineAdCard());
       }
     }
 
@@ -320,7 +342,7 @@ class DashboardScreenState extends State<DashboardScreen> {
             child: _withDismissButton(NewsCard(news: item), () => _dismissNews(item)),
           ),
         );
-        if ((i + 1) % 4 == 0) items.add(const InlineAdCard());
+        if (showAds && (i + 1) % 4 == 0) items.add(const InlineAdCard());
       }
     }
 
