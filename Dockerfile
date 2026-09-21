@@ -11,7 +11,7 @@ WORKDIR /app
 COPY backend/requirements.txt backend/requirements.txt
 RUN pip install --no-cache-dir -r backend/requirements.txt
 
-COPY digest_engine.py config.py send_report.py ./
+COPY digest_engine.py config.py send_report.py PRIVACY.md TERMS.md ./
 COPY backend/ backend/
 
 WORKDIR /app/backend

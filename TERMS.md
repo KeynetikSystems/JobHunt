@@ -1,13 +1,14 @@
 # Terms of Service
 
-**Last updated: 2026-09-19**
+**Last updated: 2026-09-21**
 
 > **This is a working draft, not legal advice.** Have a qualified lawyer
 > review this before public launch. Fill in the `[bracketed]` placeholders.
 
-These terms govern your use of JobHuntAI, operated by **[KeynetikSystems /
-your legal name]** ("we", "us"). By using the desktop app, mobile app, or
-backend service (together, the "Service"), you agree to these terms.
+These terms govern your use of JobHuntAI ("Ledger" in-app), operated by
+**[KeynetikSystems / your registered legal name]** ("we", "us"). By using the
+app (mobile or desktop) or the backend service (together, the "Service"), you
+agree to these terms.
 
 ## 1. Eligibility
 
@@ -19,17 +20,18 @@ multiple accounts to bypass free-plan limits, is not allowed (see §4).
 
 The Service searches for job listings and industry news, summarizes them,
 and — if you choose — drafts CV highlights and cover letters for specific
-opportunities using AI, based on background text you provide. **AI-generated
-content may contain errors and is not a substitute for your own judgment —
-always review drafts before sending them to a real employer.** We make no
-guarantee that any AI-drafted content is accurate, complete, or will help
-you get a job.
+opportunities using AI, based on the profile details you provide (name, work
+history, education, skills). **AI-generated content may contain errors and is
+not a substitute for your own judgment — always review drafts before sending
+them to a real employer.** We make no guarantee that any AI-drafted content
+is accurate, complete, or will help you get a job.
 
 ## 3. Accounts and security
 
-Your API key functions like a password. You're responsible for keeping it
-confidential and for all activity under your account. Tell us immediately
-if you believe your key has been compromised.
+Your access key functions like a password — you may have a separate one for
+each device you connect. You're responsible for keeping them confidential and
+for all activity under your account. Tell us immediately if you believe a key
+has been compromised.
 
 ## 4. Acceptable use
 
@@ -87,4 +89,5 @@ entity is actually registered and needs real legal input, not a guess.]**
 
 ## 12. Contact
 
-Questions about these terms: **[support@yourdomain.example]**.
+Questions about these terms: **[support@keynetiksystems.com — confirm this
+inbox exists and is monitored before publishing, or substitute a real one]**.
