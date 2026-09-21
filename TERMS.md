@@ -6,8 +6,9 @@
 > review this before public launch. Fill in the `[bracketed]` placeholders.
 
 These terms govern your use of JobHuntAI ("Ledger" in-app), operated by
-**[KeynetikSystems / your registered legal name]** ("we", "us"). By using the
-app (mobile or desktop) or the backend service (together, the "Service"), you
+**[full legal name]**, an individual (not a registered company) ("we", "us").
+By using the app (mobile or desktop) or the backend service (together, the
+"Service"), you
 agree to these terms.
 
 ## 1. Eligibility
@@ -89,5 +90,4 @@ entity is actually registered and needs real legal input, not a guess.]**
 
 ## 12. Contact
 
-Questions about these terms: **[support@keynetiksystems.com — confirm this
-inbox exists and is monitored before publishing, or substitute a real one]**.
+Questions about these terms: **keynetiqsystems@gmail.com**.

@@ -6,13 +6,11 @@
 > this before public launch — especially UK/EU data protection compliance
 > (UK GDPR), since the product's audience is UK-based job seekers and it
 > stores personal data (profile/work history). Fill in the remaining
-> `[bracketed]` placeholders — the legal entity name and a confirmed-monitored
-> support inbox — before publishing.
+> `[bracketed]` placeholder (your full legal name) before publishing.
 
-This policy covers JobHuntAI ("Ledger" in-app), operated by **[KeynetikSystems
-/ your registered legal name]** ("we", "us"). Contact:
-**[support@keynetiksystems.com — confirm this inbox exists and is monitored
-before publishing, or substitute a real one]**.
+This policy covers JobHuntAI ("Ledger" in-app), operated by **[full legal
+name]**, an individual (not a registered company) ("we", "us"). Contact:
+**keynetiqsystems@gmail.com**.
 
 ## How the app works — one data flow, not several
 
@@ -80,7 +78,7 @@ respective privacy policies.
 ## Data retention and deletion
 
 We keep your account data until you ask us to delete it. **To request
-deletion, email us at [support@keynetiksystems.com]** — there's currently no
+deletion, email us at keynetiqsystems@gmail.com** — there's currently no
 self-serve "delete my account" button in the app (a known gap; a self-serve
 option should be added before wide release).
 
@@ -98,7 +96,7 @@ option should be added before wide release).
 
 If you're in the UK/EU, you have the right to access, correct, or delete
 your personal data, and to object to or restrict certain processing. Contact
-us at **[support@keynetiksystems.com]** to exercise these rights.
+us at **keynetiqsystems@gmail.com** to exercise these rights.
 
 ## Children's privacy
 
