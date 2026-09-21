@@ -12,6 +12,15 @@ This policy covers JobHuntAI ("Ledger" in-app), operated by **[full legal
 name]**, an individual (not a registered company) ("we", "us"). Contact:
 **keynetiqsystems@gmail.com**.
 
+## Who this policy applies to
+
+This app is aimed at UK-based job seekers, so this policy is written to meet
+UK GDPR — and UK GDPR applies to processing UK residents' personal data
+regardless of where the operator is located, so this isn't affected by
+**[operator's jurisdiction — see below]**. If you're outside the UK/EU, some
+of the rights described below (e.g. under "Your rights") may not apply to
+you by law, though we don't distinguish in practice.
+
 ## How the app works — one data flow, not several
 
 JobHuntAI is a single app (built with Flutter, for mobile and desktop) that
@@ -105,9 +114,27 @@ anyone under 16.
 
 ## International data transfers
 
-Some processors above (Groq, Tavily, Resend) may process data outside the
-UK/EU. **[Confirm their data-transfer safeguards — standard contractual
-clauses or equivalent — before relying on this policy.]**
+All three processors we send data to (Groq, Tavily, Resend) are US-based, so
+your data may be processed outside the UK/EU:
+
+- **Groq** and **Resend** both maintain a standard Data Processing Addendum
+  that automatically applies through their normal terms of service (no
+  separate signature required), incorporating the EU Standard Contractual
+  Clauses and the UK's International Data Transfer Addendum. Resend also
+  participates in the EU-U.S. Data Privacy Framework, an additional
+  recognized transfer mechanism.
+- **Tavily** does not offer a standard Data Processing Agreement to
+  non-enterprise customers — only via custom negotiation, which we have not
+  pursued. This is a real, currently-unaddressed gap; it's mitigated in
+  practice by Tavily receiving only search query text, not your profile or
+  other personal data (see "What we collect" above), but it should still be
+  resolved — either a negotiated DPA with Tavily, or replacing it with a
+  processor that offers standard GDPR-compliant terms — before relying on
+  this policy for a real launch.
+
+**[Have a lawyer confirm this assessment and whether it's sufficient —
+this is our own reading of each processor's published terms as of
+2026-09-21, not a legal opinion.]**
 
 ## Changes to this policy
 

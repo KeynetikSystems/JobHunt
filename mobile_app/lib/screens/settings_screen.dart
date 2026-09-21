@@ -649,6 +649,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
+            if (!connected)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    const Text(
+                      'By connecting, you agree to our ',
+                      style: TextStyle(color: LedgerColors.slate, fontSize: 11),
+                    ),
+                    InkWell(
+                      onTap: () => _openLegalDoc('/privacy'),
+                      child: const Text(
+                        'Privacy Policy',
+                        style: TextStyle(color: LedgerColors.brass, fontSize: 11, decoration: TextDecoration.underline),
+                      ),
+                    ),
+                    const Text(' and ', style: TextStyle(color: LedgerColors.slate, fontSize: 11)),
+                    InkWell(
+                      onTap: () => _openLegalDoc('/terms'),
+                      child: const Text(
+                        'Terms of Service',
+                        style: TextStyle(color: LedgerColors.brass, fontSize: 11, decoration: TextDecoration.underline),
+                      ),
+                    ),
+                    const Text('.', style: TextStyle(color: LedgerColors.slate, fontSize: 11)),
+                  ],
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: Row(
