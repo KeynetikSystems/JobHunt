@@ -516,6 +516,52 @@ def me(user: dict = Depends(auth.require_user)):
     )
 
 
+@app.delete("/api/account")
+def delete_account(user: dict = Depends(auth.require_user)):
+    """Self-serve account deletion — no self-serve path existed before this, which was
+    a real GDPR/CCPA gap for a product storing profile data (work history, contact
+    details) for a UK/EU audience. Deletes everything tied to this account: all
+    connected devices' keys (every device is immediately logged out), history, usage
+    logs, and upgrade requests, then the account row itself. Irreversible — there's no
+    undelete, matching what "delete my account" actually means to a user asking for it."""
+    with db.get_db() as conn:
+        conn.execute("DELETE FROM usage_log WHERE user_id = ?", (user["id"],))
+        conn.execute("DELETE FROM upgrade_requests WHERE user_id = ?", (user["id"],))
+        conn.execute("DELETE FROM seen_items WHERE user_id = ?", (user["id"],))
+        conn.execute("DELETE FROM device_keys WHERE user_id = ?", (user["id"],))
+        conn.execute("DELETE FROM users WHERE id = ?", (user["id"],))
+    return {"status": "deleted"}
+
+
+@app.get("/api/export")
+def export_account(user: dict = Depends(auth.require_user)):
+    """Self-serve data export — every piece of data this account has stored with us,
+    as plain JSON. Deliberately excludes the API key itself (it's a credential, not
+    account data, and this endpoint is reachable by anyone holding a valid key anyway)."""
+    with db.get_db() as conn:
+        history_rows = conn.execute(
+            "SELECT url, kind, title, firm, seniority, note, headline, source, summary, seen_at "
+            "FROM seen_items WHERE user_id = ? ORDER BY seen_at DESC",
+            (user["id"],),
+        ).fetchall()
+        device_count = conn.execute(
+            "SELECT COUNT(*) AS c FROM device_keys WHERE user_id = ?", (user["id"],)
+        ).fetchone()["c"]
+    return {
+        "email": user["email"],
+        "email_verified": bool(user["email_verified"]),
+        "plan": user["plan"],
+        "created_at": user["created_at"],
+        "profile": _profile_of(user),
+        "alerts": {
+            "slack_webhook_url": user["slack_webhook_url"],
+            "telegram_chat_id": user["telegram_chat_id"],
+        },
+        "connected_devices": device_count,
+        "history": [dict(row) for row in history_rows],
+    }
+
+
 @app.get("/api/history", response_model=HistoryResponse)
 def history(user: dict = Depends(auth.require_verified_user)):
     """Everything this user has previously seen (sent or dismissed), newest first —

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../api_client.dart';
 import '../error_utils.dart';
@@ -138,6 +139,121 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         setState(() => _accountStatus = 'Failed: $message');
         _showFeedback('Failed: $message', isError: true);
+      }
+    } finally {
+      if (mounted) setState(() => _accountBusy = false);
+    }
+  }
+
+  Future<void> _exportAccount() async {
+    setState(() {
+      _accountBusy = true;
+      _accountStatus = 'Preparing export…';
+    });
+    try {
+      final json = await ApiClient.instance.exportAccount();
+      if (mounted) {
+        setState(() => _accountStatus = '');
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: LedgerColors.inkPanel,
+            title: const Text('Your data', style: TextStyle(color: LedgerColors.parchment)),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: SelectableText(
+                  json,
+                  style: const TextStyle(color: LedgerColors.slate, fontSize: 11, fontFamily: 'monospace'),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: json));
+                  _showFeedback('Copied to clipboard.');
+                },
+                child: const Text('Copy'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      final message = friendlyError(e);
+      if (mounted) {
+        setState(() => _accountStatus = 'Export failed: $message');
+        _showFeedback('Export failed: $message', isError: true);
+      }
+    } finally {
+      if (mounted) setState(() => _accountBusy = false);
+    }
+  }
+
+  Future<void> _deleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: LedgerColors.inkPanel,
+        title: const Text('Delete account?', style: TextStyle(color: LedgerColors.parchment)),
+        content: const Text(
+          "This permanently deletes your account, profile, history, and alert settings from our "
+          "servers — including on every other device you've connected. There's no undo.",
+          style: TextStyle(color: LedgerColors.slate),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            child: const Text('Delete permanently'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() {
+      _accountBusy = true;
+      _accountStatus = 'Deleting…';
+    });
+    try {
+      await ApiClient.instance.deleteAccount();
+      if (mounted) {
+        setState(() {
+          _urlCtrl.text = ApiClient.instance.baseUrl ?? '';
+          _emailCtrl.clear();
+          _fullNameCtrl.clear();
+          _phoneCtrl.clear();
+          _locationCtrl.clear();
+          _linkedinCtrl.clear();
+          _workHistoryCtrl.clear();
+          _educationCtrl.clear();
+          _skillsCtrl.clear();
+          _slackCtrl.clear();
+          _telegramCtrl.clear();
+          _status = 'Account deleted.';
+          _profileStatus = '';
+          _accountStatus = '';
+          _alertsStatus = '';
+          _account = null;
+        });
+        _showFeedback('Account deleted.');
+        widget.onConnectionChanged();
+      }
+    } catch (e) {
+      final message = friendlyError(e);
+      if (mounted) {
+        setState(() => _accountStatus = 'Delete failed: $message');
+        _showFeedback('Delete failed: $message', isError: true);
       }
     } finally {
       if (mounted) setState(() => _accountBusy = false);
@@ -425,6 +541,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 onPressed: () => _openLegalDoc('/terms'),
                                 style: TextButton.styleFrom(foregroundColor: LedgerColors.slate, padding: EdgeInsets.zero),
                                 child: const Text('Terms of Service', style: TextStyle(fontSize: 11)),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              TextButton(
+                                onPressed: _accountBusy ? null : _exportAccount,
+                                style: TextButton.styleFrom(foregroundColor: LedgerColors.slate, padding: EdgeInsets.zero),
+                                child: const Text('Export my data', style: TextStyle(fontSize: 11)),
+                              ),
+                              const SizedBox(width: 16),
+                              TextButton(
+                                onPressed: _accountBusy ? null : _deleteAccount,
+                                style: TextButton.styleFrom(foregroundColor: Colors.redAccent, padding: EdgeInsets.zero),
+                                child: const Text('Delete my account', style: TextStyle(fontSize: 11)),
                               ),
                             ],
                           ),

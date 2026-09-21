@@ -242,6 +242,29 @@ class ApiClient {
     return AccountStatus.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
 
+  /// Every piece of data this account has stored server-side, as raw JSON — the
+  /// caller decides what to do with it (e.g. save to a file).
+  Future<String> exportAccount() async {
+    _requireConnected();
+    final res = await http.get(Uri.parse('$baseUrl/api/export'), headers: _authHeaders);
+    if (res.statusCode != 200) {
+      throw Exception(_errorDetail(res));
+    }
+    return const JsonEncoder.withIndent('  ').convert(jsonDecode(res.body));
+  }
+
+  /// Irreversible — deletes the account and everything tied to it server-side, then
+  /// clears local connection state exactly like disconnect() (every device's key,
+  /// including this one, is invalidated by the deletion itself).
+  Future<void> deleteAccount() async {
+    _requireConnected();
+    final res = await http.delete(Uri.parse('$baseUrl/api/account'), headers: _authHeaders);
+    if (res.statusCode != 200) {
+      throw Exception(_errorDetail(res));
+    }
+    await disconnect();
+  }
+
   Future<void> resendVerification() async {
     _requireConnected();
     final res = await http.post(Uri.parse('$baseUrl/api/resend-verification'), headers: _authHeaders);

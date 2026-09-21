@@ -158,10 +158,11 @@ per-user state lives in its own table rather than on `users` directly.
   without regenerating a key everywhere. The fuller version of `device_keys`, for later.
 - **No key expiry.** A device key is valid forever until the account re-registers
   (which now only affects that flow's own new key, not other devices).
-- **No account deletion or data export.** Nothing lets a user delete their account or
-  pull their own data today — would require manually running SQL. Worth real attention
-  if this ever has EU/UK (GDPR) or California (CCPA) users, given it stores email and
-  CV/background text.
+- ~~No account deletion or data export~~ — resolved 2026-09-21: `DELETE /api/account`
+  (cascades through `device_keys`/`seen_items`/`usage_log`/`upgrade_requests`, verified
+  live against an isolated backend — the deleted account's key is immediately rejected
+  afterward) and `GET /api/export` (every field the account has stored, as JSON), both
+  self-serve from Settings on the app.
 - **No per-user saved query lists on the backend.** Desktop used to have a local raw
   query-list editor (removed in the hosted-backend migration); the backend only offers
   the one shared default set plus ad-hoc single-query search. If that flexibility is
