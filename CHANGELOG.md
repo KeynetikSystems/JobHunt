@@ -1,5 +1,42 @@
 # Changelog
 
+## 2026-09-21
+
+### Desktop retirement, account deletion/export, mobile state-management migration
+
+- **QML desktop app retired.** The separate PySide6/QML desktop app is no longer part
+  of this repo — replaced by Flutter's own desktop build targets (Windows/macOS/Linux),
+  so there's one client codebase for mobile and desktop instead of two. The QML app's
+  final state (feature-equivalent to mobile, hosted-keys architecture) is archived at
+  [KeynetikSystems/Ledger-qml-archive](https://github.com/KeynetikSystems/Ledger-qml-archive)
+  for history, not deleted outright. Desktop ads still need gating behind premium in
+  the Flutter codebase, mirroring mobile — not done in this pass.
+- **`DELETE /api/account`** — self-serve account deletion, cascading through
+  `device_keys`/`seen_items`/`usage_log`/`upgrade_requests`. Verified live against an
+  isolated backend that the deleted account's key is immediately rejected afterward.
+- **`GET /api/export`** — returns every field the account has stored, as JSON.
+  Both routes are exposed from Settings → Account on the app (`account_section.dart`).
+- **Mobile state management moved to Riverpod.** `dashboard_screen.dart`,
+  `history_screen.dart`, and `settings_screen.dart` are now thin `Consumer`/
+  `ConsumerWidget` views over `StateNotifierProvider`/`ChangeNotifierProvider` state
+  (`auth_provider.dart`, `dashboard_provider.dart`, `history_provider.dart`,
+  `settings_provider.dart`), replacing the previous plain-`StatefulWidget` screens with
+  local `setState`. Motivation: connection state (`AuthState`) needed to be shared
+  across Dashboard/History/Settings without manually threading callbacks — Riverpod's
+  `ref.listen` is what lets Dashboard/History react to a Settings-driven
+  connect/disconnect. The pre-migration Dashboard is kept at
+  `dashboard_screen.dart.bak` for reference only; nothing imports it.
+
+**Also housekeeping, not a behavior change**: the standalone SSL-certificate debugging
+scripts at the repo root (`demonstrate_ssl_fix.py`, `verify_ssl.py`, `verify_ssl_fix.py`,
+`test_ssl_fix.py`, `ssl_test.py`, `ascii_ssl_test.py`, `simple_ssl_test.py`,
+`COMPLETE_SSL_FIX.md`) were working files for diagnosing a macOS certificate-verification
+failure. The fix they describe (a certifi-backed `ssl.create_default_context`, passed
+into every `urlopen` call) is already merged into `digest_engine.py`'s
+`_http_post_json`. These scripts aren't wired into any test suite or CI step — worth
+archiving or deleting so they don't read as current guidance to whoever picks this up
+next.
+
 ## 2026-09-20
 
 ### UX critique follow-up round 2: heading mismatch, History parity, validation, skeletons, collapsible Settings
