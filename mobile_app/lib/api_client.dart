@@ -55,6 +55,30 @@ class ApiClient {
     );
   }
 
+  /// Directly connects using a known Access Key received via email.
+  Future<void> connectWithKey({
+    required String baseUrl,
+    required String email,
+    required String apiKey,
+  }) async {
+    final normalizedUrl = baseUrl.endsWith('/')
+        ? baseUrl.substring(0, baseUrl.length - 1)
+        : baseUrl;
+
+    await AuthService.instance.saveConnection(
+      baseUrl: normalizedUrl,
+      apiKey: apiKey,
+      email: email,
+    );
+
+    try {
+      await me();
+    } catch (e) {
+      await disconnect();
+      throw Exception('Invalid Access Key or server connection failed.');
+    }
+  }
+
   Future<void> disconnect() async {
     await AuthService.instance.disconnect();
   }

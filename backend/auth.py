@@ -23,11 +23,15 @@ import db
 
 
 def generate_api_key() -> str:
-    return "jh_" + secrets.token_urlsafe(24)
+    # Generates a clean, human-friendly 8-character hex key formatted as JH-XXXX-XXXX
+    raw = secrets.token_hex(4).upper()
+    return f"JH-{raw[:4]}-{raw[4:]}"
 
 
 def hash_api_key(key: str) -> str:
-    return hashlib.sha256(key.encode("utf-8")).hexdigest()
+    # Normalize key (strip spaces/hyphens, uppercase) so formats like 'jh-4f2a-9b1c' and 'JH4F2A9B1C' match
+    normalized = key.strip().upper().replace("-", "").replace(" ", "")
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def generate_verify_token() -> str:
