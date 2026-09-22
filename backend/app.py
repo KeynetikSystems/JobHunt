@@ -26,6 +26,7 @@ Run locally:
     uvicorn app:app --reload
 Then open http://127.0.0.1:8000/docs for interactive testing.
 """
+import io
 import os
 import sys
 import threading
@@ -36,7 +37,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import digest_engine  # noqa: E402
 import send_report  # noqa: E402
 
-from fastapi import Depends, FastAPI, HTTPException, Request  # noqa: E402
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import HTMLResponse  # noqa: E402
 from pydantic import BaseModel, EmailStr  # noqa: E402
@@ -611,6 +612,75 @@ def put_profile(body: ProfileRequest, user: dict = Depends(auth.require_verified
              body.work_history, body.education, body.skills, user["id"]),
         )
     return ProfileResponse(**body.model_dump())
+
+
+@app.post("/api/profile/parse-cv", response_model=ProfileResponse)
+async def parse_cv(file: UploadFile = File(...), user: dict = Depends(auth.require_verified_user)):
+    """Uploads a PDF or TXT CV file. Extracts text, passes it through Groq/AI to parse
+    structured profile fields, and returns the parsed ProfileResponse."""
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty CV file uploaded.")
+
+    filename = (file.filename or "").lower()
+    raw_text = ""
+
+    if filename.endswith(".pdf"):
+        try:
+            import pypdf
+            reader = pypdf.PdfReader(io.BytesIO(content))
+            extracted = [page.extract_text() or "" for page in reader.pages]
+            raw_text = "\n".join(extracted).strip()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to read PDF file: {e}")
+    else:
+        try:
+            raw_text = content.decode("utf-8", errors="ignore").strip()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to read text file: {e}")
+
+    if not raw_text:
+        raise HTTPException(status_code=400, detail="No readable text found in the uploaded file.")
+
+    env = digest_engine.load_env()
+    groq_key = env.get("GROQ_API_KEY", "")
+    groq_model = env.get("GROQ_MODEL") or digest_engine.DEFAULT_GROQ_MODEL
+
+    if not groq_key and not env.get("ANTHROPIC_API_KEY"):
+        raise HTTPException(status_code=500, detail="Server missing AI API Key.")
+
+    prompt = (
+        "You are an expert HR assistant. Extract structured profile information from the following CV text.\n"
+        "Return ONLY a valid JSON object with these exact keys:\n"
+        '{\n'
+        '  "full_name": "Full Name",\n'
+        '  "phone": "Phone Number",\n'
+        '  "location": "City, Country",\n'
+        '  "linkedin_url": "LinkedIn Profile URL",\n'
+        '  "work_history": "Concise summary of positions, companies, dates, and achievements",\n'
+        '  "education": "Degrees, institutions, and graduation years",\n'
+        '  "skills": "Comma-separated list of key technical and soft skills"\n'
+        '}\n\n'
+        f"CV TEXT:\n{raw_text[:8000]}\n"
+    )
+
+    try:
+        parsed = digest_engine.groq_complete(prompt, groq_key, groq_model)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI CV parsing failed: {e}")
+
+    if not isinstance(parsed, dict) or parsed.get("_parse_error"):
+        raise HTTPException(status_code=500, detail="Failed to parse CV with AI.")
+
+    return ProfileResponse(
+        full_name=str(parsed.get("full_name") or ""),
+        phone=str(parsed.get("phone") or ""),
+        location=str(parsed.get("location") or ""),
+        linkedin_url=str(parsed.get("linkedin_url") or ""),
+        work_history=str(parsed.get("work_history") or ""),
+        education=str(parsed.get("education") or ""),
+        skills=str(parsed.get("skills") or ""),
+    )
 
 
 @app.post("/api/materials", response_model=MaterialsResponse)

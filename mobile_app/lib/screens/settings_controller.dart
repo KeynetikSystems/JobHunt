@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../api_client.dart';
 import '../auth_service.dart';
@@ -158,6 +159,41 @@ class SettingsController extends ChangeNotifier {
     apiKeyCtrl.clear();
     _account = null;
     notifyListeners();
+  }
+
+  Future<String?> importCv() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'txt'],
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return null;
+
+      final file = result.files.single;
+      final bytes = file.bytes;
+      if (bytes == null) return 'Could not read selected file.';
+
+      _profileBusy = true;
+      notifyListeners();
+
+      final profile = await ApiClient.instance.parseCv(bytes, file.name);
+      if (profile.fullName.isNotEmpty) fullNameCtrl.text = profile.fullName;
+      if (profile.phone.isNotEmpty) phoneCtrl.text = profile.phone;
+      if (profile.location.isNotEmpty) locationCtrl.text = profile.location;
+      if (profile.linkedinUrl.isNotEmpty) linkedinCtrl.text = profile.linkedinUrl;
+      if (profile.workHistory.isNotEmpty) workHistoryCtrl.text = profile.workHistory;
+      if (profile.education.isNotEmpty) educationCtrl.text = profile.education;
+      if (profile.skills.isNotEmpty) skillsCtrl.text = profile.skills;
+
+      _profileBusy = false;
+      notifyListeners();
+      return 'CV imported and profile updated!';
+    } catch (e) {
+      _profileBusy = false;
+      notifyListeners();
+      return 'CV import failed: ${friendlyError(e)}';
+    }
   }
 
   Future<String?> saveProfile() async {

@@ -210,6 +210,20 @@ class ApiClient {
     }
   }
 
+  /// Sends a CV file (PDF or TXT) to the backend to parse and extract structured profile data using AI.
+  Future<UserProfile> parseCv(List<int> bytes, String filename) async {
+    _requireConnected();
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/api/profile/parse-cv'));
+    request.headers.addAll({'X-API-Key': apiKey ?? ''});
+    request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+    final streamedRes = await request.send();
+    final res = await http.Response.fromStream(streamedRes);
+    if (res.statusCode != 200) {
+      throw Exception(_errorDetail(res));
+    }
+    return UserProfile.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+  }
+
   /// Drafts CV highlights + a cover letter for one job, using the profile saved via
   /// saveProfile() and the backend's own Groq key. Returns (cvHighlights, coverLetter).
   /// Takes a plain map (title/firm/seniority/note/url) so both a JobListing and a
