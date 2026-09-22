@@ -1,90 +1,46 @@
 import 'package:flutter/material.dart';
-import '../api_client.dart';
-import '../error_utils.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/history_item.dart';
 import '../models/job_listing.dart';
-import '../theme.dart';
+import '../providers/auth_provider.dart';
+import '../providers/history_provider.dart';
 import '../widgets/feed_filter_chip.dart';
 import '../widgets/history_card.dart';
 
-enum _HistoryFilter { all, jobs, news }
-
-class HistoryScreen extends StatefulWidget {
+class HistoryScreen extends ConsumerWidget {
   const HistoryScreen({super.key});
 
-  @override
-  State<HistoryScreen> createState() => HistoryScreenState();
-}
-
-class HistoryScreenState extends State<HistoryScreen> {
-  bool _busy = false;
-  String _status = '';
-  List<HistoryItem> _items = [];
-  bool _loadedOnce = false;
-  _HistoryFilter _filter = _HistoryFilter.all;
-  bool _seniorityDescending = false;
-
-  /// Public so the shell can refresh history right after Settings connects/disconnects.
-  void onConnectionChanged() {
-    _items = [];
-    _loadedOnce = false;
-    setState(() {});
-  }
-
-  Future<void> _load() async {
-    if (!ApiClient.instance.isConnected) {
-      setState(() => _status = 'Not connected — set your backend URL in Settings first.');
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _status = '';
-    });
-    try {
-      final items = await ApiClient.instance.history();
-      if (!mounted) return;
-      setState(() {
-        _items = items;
-        _loadedOnce = true;
-        _status = items.isEmpty ? 'No previously seen items yet.' : '';
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _status = 'Could not load history: ${friendlyError(e)}');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  List<HistoryItem> get _filteredSortedItems {
-    final jobs = _items.where((i) => i.isJob).toList()
-      ..sort((a, b) => _seniorityDescending
+  List<HistoryItem> _filteredSortedItems(HistoryState state) {
+    final jobs = state.items.where((i) => i.isJob).toList()
+      ..sort((a, b) => state.seniorityDescending
           ? seniorityRankOf(b.seniority).compareTo(seniorityRankOf(a.seniority))
           : seniorityRankOf(a.seniority).compareTo(seniorityRankOf(b.seniority)));
-    final news = _items.where((i) => !i.isJob).toList();
-    switch (_filter) {
-      case _HistoryFilter.jobs:
+    final news = state.items.where((i) => !i.isJob).toList();
+    switch (state.filter) {
+      case HistoryFilter.jobs:
         return jobs;
-      case _HistoryFilter.news:
+      case HistoryFilter.news:
         return news;
-      case _HistoryFilter.all:
-        // Keep original newest-first order for "All" rather than grouping by kind —
-        // History (unlike Dashboard) is one continuous timeline, so interleaving by
-        // recency is more useful than section-grouping it.
-        return _items;
+      case HistoryFilter.all:
+        return state.items;
     }
   }
 
   @override
-  Widget build(BuildContext context) {
-    final connected = ApiClient.instance.isConnected;
-    if (connected && !_loadedOnce && !_busy) {
-      // Kick off the first load without blocking the current build.
-      WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(historyProvider);
+    final connected = ref.watch(authProvider).isConnected;
+    final notifier = ref.read(historyProvider.notifier);
+
+    if (connected && !state.loadedOnce && !state.busy) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        notifier.load();
+      });
     }
-    final jobCount = _items.where((i) => i.isJob).length;
-    final newsCount = _items.length - jobCount;
-    final visibleItems = _filteredSortedItems;
+
+    final jobCount = state.items.where((i) => i.isJob).length;
+    final newsCount = state.items.length - jobCount;
+    final visibleItems = _filteredSortedItems(state);
 
     return SafeArea(
       child: Padding(
@@ -94,30 +50,29 @@ class HistoryScreenState extends State<HistoryScreen> {
           children: [
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
                     'History',
-                    style: TextStyle(
-                      color: LedgerColors.parchment,
-                      fontFamily: 'Georgia',
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: Theme.of(context).textTheme.displaySmall,
                   ),
                 ),
                 IconButton(
-                  onPressed: connected && !_busy ? _load : null,
+                  onPressed: connected && !state.busy ? notifier.load : null,
                   tooltip: 'Refresh history',
-                  icon: const Icon(Icons.refresh, color: LedgerColors.brass),
+                  icon: Icon(
+                    Icons.refresh,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                 ),
               ],
             ),
-            const Text(
+            Text(
               'Everything previously sent or dismissed, newest first.',
-              style: TextStyle(color: LedgerColors.slate, fontSize: 12),
+              style:
+                  Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12),
             ),
             const SizedBox(height: 10),
-            if (_items.isNotEmpty)
+            if (state.items.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
@@ -128,31 +83,43 @@ class HistoryScreenState extends State<HistoryScreen> {
                         children: [
                           FeedFilterChip(
                             label: 'All',
-                            selected: _filter == _HistoryFilter.all,
-                            onSelected: () => setState(() => _filter = _HistoryFilter.all),
+                            selected: state.filter == HistoryFilter.all,
+                            onSelected: () =>
+                                notifier.setFilter(HistoryFilter.all),
                           ),
                           FeedFilterChip(
                             label: 'Jobs ($jobCount)',
-                            selected: _filter == _HistoryFilter.jobs,
-                            onSelected: () => setState(() => _filter = _HistoryFilter.jobs),
+                            selected: state.filter == HistoryFilter.jobs,
+                            onSelected: () =>
+                                notifier.setFilter(HistoryFilter.jobs),
                           ),
                           FeedFilterChip(
                             label: 'News ($newsCount)',
-                            selected: _filter == _HistoryFilter.news,
-                            onSelected: () => setState(() => _filter = _HistoryFilter.news),
+                            selected: state.filter == HistoryFilter.news,
+                            onSelected: () =>
+                                notifier.setFilter(HistoryFilter.news),
                           ),
                         ],
                       ),
                     ),
-                    if (_filter == _HistoryFilter.jobs && jobCount > 0)
+                    if (state.filter == HistoryFilter.jobs && jobCount > 0)
                       TextButton.icon(
-                        onPressed: () => setState(() => _seniorityDescending = !_seniorityDescending),
+                        onPressed: () => notifier
+                            .setSeniorityDescending(!state.seniorityDescending),
                         icon: Icon(
-                          _seniorityDescending ? Icons.arrow_downward : Icons.arrow_upward,
+                          state.seniorityDescending
+                              ? Icons.arrow_downward
+                              : Icons.arrow_upward,
                           size: 16,
-                          color: LedgerColors.brass,
+                          color: Theme.of(context).colorScheme.primary,
                         ),
-                        label: const Text('Seniority', style: TextStyle(fontSize: 12, color: LedgerColors.brass)),
+                        label: Text(
+                          'Seniority',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
                         style: TextButton.styleFrom(
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                           minimumSize: const Size(44, 44),
@@ -162,32 +129,45 @@ class HistoryScreenState extends State<HistoryScreen> {
                   ],
                 ),
               ),
-            if (_busy)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
+            if (state.busy)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
                 child: SizedBox(
                   width: 14,
                   height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: LedgerColors.brass),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                 ),
               ),
-            if (_status.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(_status, style: const TextStyle(color: LedgerColors.brass, fontSize: 12)),
-              ),
-            if (_items.isNotEmpty && visibleItems.isEmpty)
+            if (state.status.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Text(
-                  'No ${_filter == _HistoryFilter.jobs ? 'job' : 'news'} items in your history.',
-                  style: const TextStyle(color: LedgerColors.slate, fontStyle: FontStyle.italic, fontSize: 12),
+                  state.status,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            if (state.items.isNotEmpty && visibleItems.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  'No ${state.filter == HistoryFilter.jobs ? 'job' : 'news'} items in your history.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontStyle: FontStyle.italic,
+                        fontSize: 12,
+                      ),
                 ),
               ),
             Expanded(
               child: ListView.builder(
                 itemCount: visibleItems.length,
-                itemBuilder: (context, i) => HistoryCard(item: visibleItems[i]),
+                itemBuilder: (context, i) =>
+                    HistoryCard(item: visibleItems[i]),
               ),
             ),
           ],

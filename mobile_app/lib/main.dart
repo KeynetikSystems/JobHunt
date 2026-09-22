@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'ad_config.dart';
-import 'api_client.dart';
 import 'notifications.dart';
+import 'providers/auth_provider.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/settings_screen.dart';
@@ -22,66 +23,64 @@ class JobHuntApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Ledger',
-      debugShowCheckedModeBanner: false,
-      theme: buildLedgerTheme(),
-      home: const RootShell(),
+    return ProviderScope(
+      child: MaterialApp(
+        title: 'Ledger',
+        debugShowCheckedModeBanner: false,
+        theme: buildLedgerTheme(),
+        home: const RootShell(),
+      ),
     );
   }
 }
 
-class RootShell extends StatefulWidget {
+class RootShell extends ConsumerStatefulWidget {
   const RootShell({super.key});
 
   @override
-  State<RootShell> createState() => _RootShellState();
+  ConsumerState<RootShell> createState() => _RootShellState();
 }
 
-class _RootShellState extends State<RootShell> {
+class _RootShellState extends ConsumerState<RootShell> {
   int _index = 0;
-  final _dashboardKey = GlobalKey<DashboardScreenState>();
-  final _historyKey = GlobalKey<HistoryScreenState>();
-  bool _loadedConnection = false;
-
-  @override
-  void initState() {
-    super.initState();
-    ApiClient.instance.load().then((_) {
-      if (mounted) setState(() => _loadedConnection = true);
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
-    if (!_loadedConnection) {
+    final authState = ref.watch(authProvider);
+
+    if (!authState.isLoaded) {
       return const Scaffold(body: SizedBox.shrink());
     }
+
     return Scaffold(
       body: IndexedStack(
         index: _index,
-        children: [
-          DashboardScreen(key: _dashboardKey),
-          HistoryScreen(key: _historyKey),
-          SettingsScreen(
-            onConnectionChanged: () {
-              _dashboardKey.currentState?.onConnectionChanged();
-              _historyKey.currentState?.onConnectionChanged();
-            },
-          ),
+        children: const [
+          DashboardScreen(),
+          HistoryScreen(),
+          SettingsScreen(),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _index,
         onTap: (i) => setState(() => _index = i),
-        backgroundColor: LedgerColors.inkPanel,
-        selectedItemColor: LedgerColors.brass,
-        unselectedItemColor: LedgerColors.slate,
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        selectedItemColor: Theme.of(context).colorScheme.primary,
+        unselectedItemColor: Theme.of(context).textTheme.bodySmall?.color,
         type: BottomNavigationBarType.fixed,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.menu_book_outlined), label: 'Dashboard'),
-          BottomNavigationBarItem(icon: Icon(Icons.history_edu_outlined), label: 'History'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), label: 'Settings'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.menu_book_outlined),
+            label: 'Dashboard',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.history_edu_outlined),
+            label: 'History',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings_outlined),
+            label: 'Settings',
+          ),
         ],
       ),
     );

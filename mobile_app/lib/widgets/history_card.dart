@@ -20,6 +20,7 @@ class HistoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final title = item.isJob ? item.title : item.headline;
     final meta = item.isJob
         ? '${item.firm}  ·  ${item.seniority}'
@@ -31,8 +32,8 @@ class HistoryCard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: LedgerColors.inkPanel,
-          border: Border.all(color: LedgerColors.hairline),
+          color: theme.colorScheme.surface,
+          border: Border.all(color: theme.colorScheme.outline),
         ),
         child: IntrinsicHeight(
           child: Row(
@@ -40,7 +41,7 @@ class HistoryCard extends StatelessWidget {
             children: [
               Container(
                 width: 3,
-                color: item.isJob ? LedgerColors.brass : LedgerColors.slate,
+                color: item.isJob ? theme.colorScheme.primary : theme.textTheme.bodySmall?.color,
               ),
               Expanded(
                 child: Padding(
@@ -53,8 +54,7 @@ class HistoryCard extends StatelessWidget {
                           Expanded(
                             child: Text(
                               title,
-                              style: const TextStyle(
-                                color: LedgerColors.parchment,
+                              style: theme.textTheme.titleLarge?.copyWith(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -62,15 +62,15 @@ class HistoryCard extends StatelessWidget {
                           ),
                           Text(
                             _formatSeenAt(item.seenAt),
-                            style: const TextStyle(color: LedgerColors.slate, fontSize: 11),
+                            style: theme.textTheme.labelLarge?.copyWith(fontSize: 11),
                           ),
                         ],
                       ),
                       const SizedBox(height: 4),
                       Text(
                         meta,
-                        style: const TextStyle(
-                          color: LedgerColors.brass,
+                        style: TextStyle(
+                          color: theme.colorScheme.primary,
                           fontSize: 11,
                           fontFamily: 'monospace',
                         ),
@@ -78,7 +78,7 @@ class HistoryCard extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         body,
-                        style: const TextStyle(color: LedgerColors.slate, fontSize: 12),
+                        style: theme.textTheme.bodySmall?.copyWith(fontSize: 12),
                       ),
                       if (item.isJob)
                         ApplicationMaterialsPanel(job: {

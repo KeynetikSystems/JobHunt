@@ -15,6 +15,8 @@ class AccountStatus {
   });
 
   bool get isPremium => plan == 'premium';
+  bool get isVerified => emailVerified;
+  String get status => plan.toUpperCase();
 
   factory AccountStatus.fromJson(Map<String, dynamic> json) {
     return AccountStatus(

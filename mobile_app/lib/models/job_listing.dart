@@ -1,8 +1,12 @@
-class JobListing {
+import 'feed_item.dart';
+
+class JobListing implements FeedItem {
+  @override
   final String title;
   final String firm;
   final String seniority;
   final String note;
+  @override
   final String url;
 
   const JobListing({
@@ -13,6 +17,7 @@ class JobListing {
     required this.url,
   });
 
+  @override
   Map<String, dynamic> toJson() => {
         'title': title,
         'firm': firm,

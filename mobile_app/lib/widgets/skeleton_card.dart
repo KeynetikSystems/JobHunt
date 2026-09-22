@@ -27,7 +27,7 @@ class _SkeletonCardState extends State<SkeletonCard> with SingleTickerProviderSt
     super.dispose();
   }
 
-  Widget _bar(double width, double height) {
+  Widget _bar(double width, double height, Color color) {
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
@@ -40,7 +40,7 @@ class _SkeletonCardState extends State<SkeletonCard> with SingleTickerProviderSt
         width: width,
         height: height,
         decoration: BoxDecoration(
-          color: LedgerColors.slate,
+          color: color,
           borderRadius: BorderRadius.circular(2),
         ),
       ),
@@ -49,30 +49,32 @@ class _SkeletonCardState extends State<SkeletonCard> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final slate = theme.textTheme.bodySmall?.color ?? Colors.grey;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: LedgerColors.inkPanel,
-        border: Border.all(color: LedgerColors.hairline),
+        color: theme.colorScheme.surface,
+        border: Border.all(color: theme.colorScheme.outline),
       ),
       child: IntrinsicHeight(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Container(width: 3, color: LedgerColors.hairline),
+            Container(width: 3, color: theme.colorScheme.outline),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _bar(double.infinity, 14),
+                    _bar(double.infinity, 14, slate),
                     const SizedBox(height: 8),
-                    _bar(140, 11),
+                    _bar(140, 11, slate),
                     const SizedBox(height: 8),
-                    _bar(double.infinity, 12),
+                    _bar(double.infinity, 12, slate),
                     const SizedBox(height: 4),
-                    _bar(200, 12),
+                    _bar(200, 12, slate),
                   ],
                 ),
               ),

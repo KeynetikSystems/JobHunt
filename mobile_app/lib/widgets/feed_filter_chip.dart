@@ -12,16 +12,20 @@ class FeedFilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return ChoiceChip(
       label: Text(
         label,
-        style: TextStyle(fontSize: 11, color: selected ? LedgerColors.inkBg : LedgerColors.parchment),
+        style: TextStyle(
+          fontSize: 11,
+          color: selected ? theme.colorScheme.onSecondary : theme.colorScheme.onSurface,
+        ),
       ),
       selected: selected,
       onSelected: (_) => onSelected(),
-      selectedColor: LedgerColors.brass,
-      backgroundColor: LedgerColors.inkPanel,
-      side: const BorderSide(color: LedgerColors.hairline),
+      selectedColor: theme.colorScheme.primary,
+      backgroundColor: theme.colorScheme.surface,
+      side: BorderSide(color: theme.colorScheme.outline),
       visualDensity: VisualDensity.compact,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     );

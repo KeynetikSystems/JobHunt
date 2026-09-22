@@ -1,12 +1,14 @@
 """Core pipeline: search (Tavily) -> summarize (Groq) -> dedupe -> email.
 
-Standalone — no Claude Code / Anthropic API involved. Used by both the
+LLM step supports Groq and Anthropic with automatic failover / round-robin (see
+groq_complete and LLM_STRATEGY). News is skipped unless ENABLE_NEWS=true. Used by both the
 JobHuntAI desktop GUI (main.py) and headless runs (Windows Task Scheduler calls
 this file directly: `python digest_engine.py`).
 
 All HTTP calls use only the standard library, so nothing needs `pip install`.
 """
 import json
+import itertools
 import re
 import time
 import urllib.request
@@ -34,6 +36,8 @@ CV_FILE = ROOT / "cv.txt"
 TAVILY_URL = "https://api.tavily.com/search"
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
+ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+ANTHROPIC_VERSION = "2023-06-01"
 
 DEFAULT_JOB_QUERIES = [
     # Consulting
@@ -155,6 +159,26 @@ If nothing qualifies, respond with: {{"jobs": [], "news": []}}
 """
 
 
+CUSTOM_SEARCH_JOBS_ONLY_PROMPT = """A user searched for exactly this: "{query}"
+
+Raw web search results (JSON array of title/url/content):
+{raw_json}
+
+From these, select only results that are actual job postings or clear hiring signals \
+genuinely relevant to that search. Ignore news articles, generic landing/browse pages, and \
+anything that isn't a job. For each one extract title, firm (the hiring company/organization), \
+seniority (one of "Graduate/Intern", "Analyst/Junior", "Associate/Mid", "Manager/Senior", \
+"Director/Partner+", or "Unspecified" if it can't be determined), and a concise one-line note \
+explaining the role and its relevance.
+
+Do not invent anything not present in the search results.
+
+Respond with ONLY a JSON object in this exact shape, nothing else:
+{{"jobs": [{{"title": "...", "firm": "...", "seniority": "...", "note": "...", "url": "..."}}]}}
+If nothing qualifies, respond with: {{"jobs": []}}
+"""
+
+
 APPLICATION_MATERIALS_PROMPT = """You are helping a job seeker tailor their application to one \
 specific role. Use ONLY the real background below — do not invent employers, titles, dates, \
 or achievements that aren't in it.
@@ -207,7 +231,11 @@ def generate_application_materials(item: dict, profile: dict, groq_key: str, gro
         firm=item.get("firm", ""),
         note=item.get("note", ""),
     )
-    result = groq_complete(prompt, groq_key, groq_model)
+    # Optional: use a different (e.g. stronger) model just for drafts, via LLM_DRAFT_MODEL in
+    # .env. A claude-* model here automatically uses ANTHROPIC_API_KEY, so it can differ from
+    # the provider used for search extraction.
+    draft_override = load_env().get("LLM_DRAFT_MODEL")
+    result = groq_complete(prompt, groq_key, draft_override or groq_model, pinned=bool(draft_override))
     if not result.get("cover_letter"):
         raise RuntimeError(result.get("_parse_error") or "Groq didn't return usable application materials.")
     return {
@@ -237,7 +265,7 @@ def _http_post_json(url: str, payload: dict, headers: dict, max_retries: int = 4
         except urllib.error.HTTPError as e:
             body = e.read().decode("utf-8", errors="replace")
             last_error = RuntimeError(f"HTTP {e.code} from {url}: {body[:500]}")
-            if e.code not in (429, 500, 502, 503, 504) or attempt == max_retries - 1:
+            if e.code not in (429, 500, 502, 503, 504, 529) or attempt == max_retries - 1:
                 raise last_error from e
             if e.code == 429:
                 retry_after = _extract_retry_after(body)
@@ -268,7 +296,11 @@ def tavily_search(query: str, api_key: str, topic: str = "general", days: int | 
     return result.get("results", [])
 
 
-def groq_complete(prompt: str, api_key: str, model: str) -> dict:
+DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
+_rr_counter = itertools.count()  # drives LLM_STRATEGY=roundrobin
+
+
+def _groq_call(prompt: str, api_key: str, model: str, max_retries: int = 4) -> dict:
     payload = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
@@ -279,12 +311,114 @@ def groq_complete(prompt: str, api_key: str, model: str) -> dict:
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}",
     }
-    result = _http_post_json(GROQ_URL, payload, headers)
+    result = _http_post_json(GROQ_URL, payload, headers, max_retries=max_retries)
+    usage = result.get("usage", {})
+    print(f"[llm-usage] groq {model} in={usage.get('prompt_tokens')} out={usage.get('completion_tokens')}")
     text = result["choices"][0]["message"]["content"]
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         return {"items": [], "_parse_error": text[:500]}
+
+
+def claude_complete(prompt: str, api_key: str, model: str, max_retries: int = 4) -> dict:
+    """Same contract as _groq_call: prompt in, parsed JSON dict out. Anthropic Messages API
+    over the stdlib, reusing _http_post_json's retry/backoff and the certifi SSL context."""
+    payload = {
+        "model": model,
+        "max_tokens": 4096,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "x-api-key": api_key,
+        "anthropic-version": ANTHROPIC_VERSION,
+    }
+    result = _http_post_json(ANTHROPIC_URL, payload, headers, max_retries=max_retries)
+    usage = result.get("usage", {})
+    print(f"[llm-usage] anthropic {model} in={usage.get('input_tokens')} out={usage.get('output_tokens')}")
+    # Keep only text blocks (responses can also contain thinking blocks).
+    text = "".join(b.get("text", "") for b in result.get("content", []) if b.get("type") == "text")
+    # No json_object mode like Groq's, so tolerate code fences / stray prose around the JSON.
+    start, end = text.find("{"), text.rfind("}")
+    if start != -1 and end > start:
+        text = text[start:end + 1]
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return {"items": [], "_parse_error": text[:500]}
+
+
+def _llm_chain(api_key: str, model: str, pinned: bool) -> list:
+    """Ordered [(name, call_fn, key, model), ...] of providers to try for one LLM call.
+
+    Keys are classified by prefix (Anthropic keys start with "sk-ant"), so it doesn't matter
+    which env var or argument they arrived in. A provider with no key is simply absent, so a
+    Groq-only or Anthropic-only setup behaves exactly like before.
+
+    LLM_STRATEGY (env):
+      failover   (default) try the preferred provider, fall back to the other on failure.
+                 Preferred = Anthropic if `model` is a claude-* id, else Groq.
+      roundrobin alternate the first-choice provider on every call (spreads load / rate limits).
+                 Calls that are `pinned` (an explicit LLM_DRAFT_MODEL) keep their preference.
+      single     only the preferred provider, no fallback.
+    """
+    env = load_env()
+    keys = [k for k in (env.get("GROQ_API_KEY"), env.get("ANTHROPIC_API_KEY"), api_key) if k]
+    groq_key = next((k for k in keys if not k.startswith("sk-ant")), "")
+    anth_key = next((k for k in keys if k.startswith("sk-ant")), "")
+
+    explicit_claude = model.startswith("claude-")
+    providers = {}
+    if groq_key:
+        providers["groq"] = (_groq_call, groq_key, DEFAULT_GROQ_MODEL if explicit_claude else model)
+    if anth_key:
+        anth_model = model if explicit_claude else (env.get("ANTHROPIC_MODEL") or DEFAULT_ANTHROPIC_MODEL)
+        providers["anthropic"] = (claude_complete, anth_key, anth_model)
+
+    strategy = (env.get("LLM_STRATEGY") or "failover").strip().lower()
+    order = ["anthropic", "groq"] if explicit_claude else ["groq", "anthropic"]
+    if strategy == "roundrobin" and not pinned:
+        order = ["groq", "anthropic"] if next(_rr_counter) % 2 == 0 else ["anthropic", "groq"]
+
+    chain = [(name, *providers[name]) for name in order if name in providers]
+    if strategy == "single":
+        chain = chain[:1]
+    return chain
+
+
+def groq_complete(prompt: str, api_key: str, model: str, pinned: bool = False) -> dict:
+    """Despite the name, this is the single LLM entry point: it picks provider(s) via
+    _llm_chain and fails over between Groq and Anthropic. Name kept so every existing caller
+    (and backend/app.py) works unchanged.
+
+    Fails over on: network errors, HTTP errors after retries (429/5xx/auth), and unparseable
+    JSON. Does NOT fail over on HTTP 413 — that propagates so _groq_with_shrink can shrink the
+    payload instead (cheaper than paying the other provider for a bigger request). While a
+    fallback exists, the primary gets only 2 attempts so failover kicks in quickly."""
+    chain = _llm_chain(api_key, model, pinned)
+    if not chain:
+        raise RuntimeError("No LLM API key configured - set GROQ_API_KEY and/or ANTHROPIC_API_KEY in .env")
+    last_result, last_error = None, None
+    for i, (name, fn, key, mdl) in enumerate(chain):
+        has_fallback = i < len(chain) - 1
+        try:
+            result = fn(prompt, key, mdl, max_retries=2 if has_fallback else 4)
+        except RuntimeError as e:
+            if "HTTP 413" in str(e):
+                raise
+            last_error = e
+            if has_fallback:
+                print(f"[llm-failover] {name} failed ({str(e)[:120]}) - trying {chain[i + 1][0]}")
+            continue
+        if result.get("_parse_error") and has_fallback:
+            print(f"[llm-failover] {name} returned unparseable JSON - trying {chain[i + 1][0]}")
+            last_result = result
+            continue
+        return result
+    if last_result is not None:
+        return last_result
+    raise last_error
 
 
 def load_seen() -> dict:
@@ -324,6 +458,13 @@ def record_history(jobs: list, news: list, status: str = "found") -> None:
             resolved_status = "emailed" if existing.get("status") == "emailed" else status
             data[url] = {**item, "kind": kind, "seen_at": existing.get("seen_at", today), "status": resolved_status}
     HISTORY_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def news_enabled(env: dict | None = None) -> bool:
+    """News is OFF by default: it costs advanced-depth Tavily searches plus a long-form LLM
+    summarization pass. Set ENABLE_NEWS=true in .env to bring it back everywhere."""
+    env = env if env is not None else load_env()
+    return str(env.get("ENABLE_NEWS", "")).strip().lower() in ("1", "true", "yes", "on")
 
 
 def load_queries() -> tuple[list, list]:
@@ -437,7 +578,9 @@ def build_html(jobs: list, news: list) -> str:
     else:
         parts.append("<p>No new listings found this week.</p>")
 
-    parts.append('<h3 style="color:#1a1a1a;">PE/VC news &mdash; London &amp; Europe</h3>')
+    show_news = bool(news) or news_enabled()
+    if show_news:
+        parts.append('<h3 style="color:#1a1a1a;">PE/VC news &mdash; London &amp; Europe</h3>')
     if news:
         parts.append("<ul>")
         for n in news:
@@ -448,7 +591,7 @@ def build_html(jobs: list, news: list) -> str:
                 f'<br><a href="{escape(n.get("url",""))}">{escape(n.get("url",""))}</a></li><br>'
             )
         parts.append("</ul>")
-    else:
+    elif show_news:
         parts.append("<p>No notable news found this week.</p>")
     parts.append("</div>")
     return "\n".join(parts)
@@ -491,18 +634,21 @@ def collect_jobs_and_news(env: dict, seen: dict, log) -> tuple[list, list]:
     raw_jobs = gather_and_filter(job_queries, tavily_key, seen, topic="general", days=None, log=log)
     log(f"  {len(raw_jobs)} candidate job results after dedup")
 
-    log("Searching for PE/VC news (Tavily, fetching full article text)...")
-    raw_news = gather_and_filter(news_queries, tavily_key, seen, topic="news", days=10, log=log,
-                                  max_results=4, include_raw_content=True, content_chars=1500)
-    log(f"  {len(raw_news)} candidate news results after dedup")
-
-    log("Summarizing job listings (Groq)...")
+    log("Summarizing job listings (LLM)...")
     jobs = _summarize_with_shrink(JOB_SUMMARY_PROMPT, raw_jobs, groq_key, groq_model, log) if raw_jobs else []
     log(f"  {len(jobs)} job listings selected")
 
-    log("Summarizing news (Groq)...")
-    news = _summarize_with_shrink(NEWS_SUMMARY_PROMPT, raw_news, groq_key, groq_model, log, max_results=10) if raw_news else []
-    log(f"  {len(news)} news items selected")
+    news = []
+    if news_enabled(env):
+        log("Searching for PE/VC news (Tavily, fetching full article text)...")
+        raw_news = gather_and_filter(news_queries, tavily_key, seen, topic="news", days=10, log=log,
+                                      max_results=4, include_raw_content=True, content_chars=1500)
+        log(f"  {len(raw_news)} candidate news results after dedup")
+        log("Summarizing news (LLM)...")
+        news = _summarize_with_shrink(NEWS_SUMMARY_PROMPT, raw_news, groq_key, groq_model, log, max_results=10) if raw_news else []
+        log(f"  {len(news)} news items selected")
+    else:
+        log("News disabled (set ENABLE_NEWS=true to enable) - skipping news search and summarization.")
 
     return jobs, news
 
@@ -522,8 +668,10 @@ def search_custom_query(query: str, env: dict, log=lambda m: None) -> tuple[list
     raw = gather_and_filter([query], tavily_key, seen={}, topic="general", days=None, log=log, max_results=10)
     if not raw:
         return [], []
-    result = _groq_with_shrink(CUSTOM_SEARCH_PROMPT, raw, groq_key, groq_model, log, query=query)
-    return result.get("jobs", []), result.get("news", [])
+    with_news = news_enabled(env)
+    prompt = CUSTOM_SEARCH_PROMPT if with_news else CUSTOM_SEARCH_JOBS_ONLY_PROMPT
+    result = _groq_with_shrink(prompt, raw, groq_key, groq_model, log, query=query)
+    return result.get("jobs", []), (result.get("news", []) if with_news else [])
 
 
 def finalize_and_send(jobs: list, news: list, log=print, to_addr: str | None = None,
@@ -581,8 +729,8 @@ def run_digest(log=print, dry_run: bool = False, skip_email: bool = False) -> tu
     groq_key = env.get("GROQ_API_KEY")
     to_addr = env.get("DIGEST_TO_EMAIL")
 
-    if not tavily_key or not groq_key:
-        raise RuntimeError("Missing TAVILY_API_KEY or GROQ_API_KEY in .env")
+    if not tavily_key or not (groq_key or env.get("ANTHROPIC_API_KEY")):
+        raise RuntimeError("Missing TAVILY_API_KEY, or neither GROQ_API_KEY nor ANTHROPIC_API_KEY, in .env")
     if not dry_run and not skip_email and not to_addr:
         raise RuntimeError("Missing DIGEST_TO_EMAIL in .env")
 

@@ -9,19 +9,20 @@ class NewsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return InkWell(
       onTap: () => launchUrl(Uri.parse(news.url), mode: LaunchMode.externalApplication),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: LedgerColors.inkPanel,
-          border: Border.all(color: LedgerColors.hairline),
+          color: theme.colorScheme.surface,
+          border: Border.all(color: theme.colorScheme.outline),
         ),
         child: IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(width: 3, color: LedgerColors.slate),
+              Container(width: 3, color: theme.textTheme.bodySmall?.color),
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
@@ -30,8 +31,7 @@ class NewsCard extends StatelessWidget {
                     children: [
                       Text(
                         news.headline,
-                        style: const TextStyle(
-                          color: LedgerColors.parchment,
+                        style: theme.textTheme.titleLarge?.copyWith(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
                         ),
@@ -39,8 +39,8 @@ class NewsCard extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         news.source,
-                        style: const TextStyle(
-                          color: LedgerColors.brass,
+                        style: TextStyle(
+                          color: theme.colorScheme.primary,
                           fontSize: 11,
                           fontFamily: 'monospace',
                         ),
@@ -48,7 +48,7 @@ class NewsCard extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         news.summary,
-                        style: const TextStyle(color: LedgerColors.slate, fontSize: 12),
+                        style: theme.textTheme.bodySmall?.copyWith(fontSize: 12),
                       ),
                     ],
                   ),

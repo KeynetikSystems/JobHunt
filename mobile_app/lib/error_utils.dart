@@ -13,5 +13,8 @@ String friendlyError(Object e) {
       lower.contains('clientexception')) {
     return "Couldn't reach the server — check your connection and backend URL in Settings.";
   }
+  if (lower.contains('not found')) {
+    return "Resource not found (404) — the backend may have changed or the session expired.";
+  }
   return msg;
 }

@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
-import '../api_client.dart';
-import '../error_utils.dart';
-import '../local_store.dart';
-import '../models/account_status.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/job_listing.dart';
-import '../models/news_item.dart';
-import '../notifications.dart';
+import '../providers/auth_provider.dart';
+import '../providers/dashboard_provider.dart';
 import '../theme.dart';
 import '../widgets/banner_ad_widget.dart';
 import '../widgets/feed_filter_chip.dart';
@@ -14,17 +11,6 @@ import '../widgets/job_card.dart';
 import '../widgets/news_card.dart';
 import '../widgets/skeleton_card.dart';
 
-const _weekdays = [
-  'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
-];
-const _months = [
-  'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',
-  'September', 'October', 'November', 'December'
-];
-
-/// Shown as tap-to-run suggestions when the user has never searched before
-/// (and so has no recent-searches history yet) — lowers the "what do I even
-/// type" barrier for a first-time visitor to an empty Dashboard.
 const _suggestedQueries = [
   'graduate strategy consulting London',
   'private equity analyst London',
@@ -32,34 +18,15 @@ const _suggestedQueries = [
   'venture capital associate Europe',
 ];
 
-enum _FeedFilter { all, jobs, news }
-
-class DashboardScreen extends StatefulWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  State<DashboardScreen> createState() => DashboardScreenState();
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   final _searchController = TextEditingController();
-  bool _busy = false;
-  String _status = 'Ready.';
-  String _dateLabel = 'No search run yet';
-  String _lastQuery = '';
-  List<JobListing> _jobs = [];
-  List<NewsItem> _news = [];
-  List<String> _recentSearches = [];
-  _FeedFilter _filter = _FeedFilter.all;
-  bool _seniorityDescending = false;
-  AccountStatus? _account;
-
-  @override
-  void initState() {
-    super.initState();
-    _restore();
-    _loadAccountStatus();
-  }
 
   @override
   void dispose() {
@@ -67,122 +34,20 @@ class DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
-  /// Public so Settings can nudge the Dashboard to reflect a fresh connection.
-  void onConnectionChanged() {
-    _loadAccountStatus();
-    setState(() {});
-  }
-
-  /// Best-effort — ads just show (the safe default) if this fails or the user
-  /// isn't connected, same as if plan were unknown.
-  Future<void> _loadAccountStatus() async {
-    if (!ApiClient.instance.isConnected) {
-      if (mounted) setState(() => _account = null);
-      return;
-    }
-    try {
-      final account = await ApiClient.instance.me();
-      if (mounted) setState(() => _account = account);
-    } catch (_) {
-      // Leave _account as-is — a transient fetch failure shouldn't flip ads on/off.
-    }
-  }
-
-  /// Restores the last search's results and recent-search history from disk,
-  /// so the Dashboard isn't a blank slate on every app restart.
-  Future<void> _restore() async {
-    final recents = await LocalStore.loadRecentSearches();
-    final last = await LocalStore.loadLastResults();
-    if (!mounted) return;
-    setState(() {
-      _recentSearches = recents;
-      if (last != null && last.query.isNotEmpty) {
-        _jobs = last.jobs;
-        _news = last.news;
-        _dateLabel = last.dateLabel;
-        _lastQuery = last.query;
-        _searchController.text = last.query;
-        _status = 'Showing your last search: "${last.query}".';
-      }
-    });
-  }
-
-  Future<void> _runSearch() async {
-    final query = _searchController.text.trim();
-    if (query.isEmpty) {
-      setState(() => _status = 'Enter something to search for first.');
-      return;
-    }
-    if (!ApiClient.instance.isConnected) {
-      setState(() => _status = 'Not connected — set your backend URL in Settings first.');
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _status = 'Searching for "$query"…';
-    });
-    try {
-      final result = await ApiClient.instance.search(query);
-      if (!mounted) return;
-      final dateLabel = _formatToday();
-      setState(() {
-        _jobs = result.jobs;
-        _news = result.news;
-        _dateLabel = dateLabel;
-        _lastQuery = query;
-        _status = 'Found ${_jobs.length} new roles and ${_news.length} news items.';
-      });
-      await LocalStore.saveLastResults(query: query, dateLabel: dateLabel, jobs: _jobs, news: _news);
-      final recents = await LocalStore.addRecentSearch(query);
-      if (mounted) setState(() => _recentSearches = recents);
-      if (await LocalStore.loadNotificationsEnabled()) {
-        NotificationService.instance.showScanResults(jobCount: result.jobs.length, newsCount: result.news.length);
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _status = 'Search failed: ${friendlyError(e)}');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _refresh() async {
-    if (_busy) return;
-    if (_lastQuery.isEmpty) {
-      setState(() => _status = 'Search for something first, then pull to refresh.');
-      return;
-    }
-    _searchController.text = _lastQuery;
-    await _runSearch();
-  }
-
-  Future<void> _dismissJob(JobListing job) async {
-    setState(() => _jobs.remove(job));
-    try {
-      await ApiClient.instance.dismiss(jobs: [job]);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _status = "Dismiss didn't save (${friendlyError(e)}) — it may reappear next scan.");
-    }
-  }
-
-  Future<void> _dismissNews(NewsItem item) async {
-    setState(() => _news.remove(item));
-    try {
-      await ApiClient.instance.dismiss(news: [item]);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _status = "Dismiss didn't save (${friendlyError(e)}) — it may reappear next scan.");
-    }
-  }
-
-  String _formatToday() {
-    final now = DateTime.now();
-    return '${_weekdays[now.weekday - 1]} ${now.day} ${_months[now.month - 1]} ${now.year}';
+  void _runSearch([String? query]) {
+    final search = query ?? _searchController.text;
+    ref.read(dashboardProvider.notifier).runSearch(search);
   }
 
   @override
   Widget build(BuildContext context) {
+    final state = ref.watch(dashboardProvider);
+    final isConnected = ref.watch(authProvider).isConnected;
+
+    if (_searchController.text.isEmpty && state.lastQuery.isNotEmpty) {
+      _searchController.text = state.lastQuery;
+    }
+
     return SafeArea(
       child: Column(
         children: [
@@ -196,55 +61,77 @@ class DashboardScreenState extends State<DashboardScreen> {
                     'LEDGER',
                     style: TextStyle(
                       color: LedgerColors.parchment,
-                      fontFamily: 'Georgia',
-                      fontSize: 16,
+                      fontSize: 14,
                       letterSpacing: 3,
                     ),
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    _lastQuery.isEmpty ? 'Your entries' : 'Results for "$_lastQuery"',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: LedgerColors.parchment,
-                      fontFamily: 'Georgia',
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    state.lastQuery.isEmpty ? 'Your entries' : 'Results',
+                    style: Theme.of(context).textTheme.displaySmall,
                   ),
-                  Text(_dateLabel, style: const TextStyle(color: LedgerColors.slate, fontSize: 12)),
+                  if (state.lastQuery.isNotEmpty)
+                    Text(
+                      'for "${state.lastQuery}"',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontSize: 14,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  Text(
+                    state.dateLabel,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(fontSize: 12),
+                  ),
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      if (_busy) ...[
-                        const SizedBox(
+                      if (state.busy) ...[
+                        SizedBox(
                           width: 14,
                           height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: LedgerColors.brass),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
                         ),
                         const SizedBox(width: 8),
                       ],
                       Expanded(
-                        child: Text(_status, style: const TextStyle(color: LedgerColors.brass, fontSize: 12)),
+                        child: Text(
+                          state.status,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontSize: 12,
+                          ),
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     'Swipe a card left (or tap ✕) to dismiss it — it won\'t show up again.',
-                    style: TextStyle(color: LedgerColors.slate, fontSize: 11, fontStyle: FontStyle.italic),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontSize: 11,
+                          fontStyle: FontStyle.italic,
+                        ),
                   ),
                   const SizedBox(height: 8),
-                  _buildFilterBar(),
+                  _buildFilterBar(state),
                   Expanded(
                     child: RefreshIndicator(
-                      onRefresh: _refresh,
-                      color: LedgerColors.brass,
-                      backgroundColor: LedgerColors.inkPanel,
+                      onRefresh: () =>
+                          ref.read(dashboardProvider.notifier).refresh(),
+                      color: Theme.of(context).colorScheme.primary,
+                      backgroundColor: Theme.of(context).colorScheme.surface,
                       child: ListView(
                         physics: const AlwaysScrollableScrollPhysics(),
-                        children: _buildFeedItems(),
+                        children: _buildFeedItems(state, isConnected),
                       ),
                     ),
                   ),
@@ -252,15 +139,18 @@ class DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
           ),
-          _buildSearchBar(),
-          if (_account?.isPremium != true) const BannerAdWidget(),
+          _buildSearchBar(state),
+          if (state.account?.isPremium != true) const BannerAdWidget(),
         ],
       ),
     );
   }
 
-  Widget _buildFilterBar() {
-    if (_jobs.isEmpty && _news.isEmpty) return const SizedBox.shrink();
+  Widget _buildFilterBar(DashboardState state) {
+    if (state.jobs.isEmpty && state.news.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final notifier = ref.read(dashboardProvider.notifier);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -271,31 +161,40 @@ class DashboardScreenState extends State<DashboardScreen> {
               children: [
                 FeedFilterChip(
                   label: 'All',
-                  selected: _filter == _FeedFilter.all,
-                  onSelected: () => setState(() => _filter = _FeedFilter.all),
+                  selected: state.filter == FeedFilter.all,
+                  onSelected: () => notifier.setFilter(FeedFilter.all),
                 ),
                 FeedFilterChip(
-                  label: 'Jobs (${_jobs.length})',
-                  selected: _filter == _FeedFilter.jobs,
-                  onSelected: () => setState(() => _filter = _FeedFilter.jobs),
+                  label: 'Jobs (${state.jobs.length})',
+                  selected: state.filter == FeedFilter.jobs,
+                  onSelected: () => notifier.setFilter(FeedFilter.jobs),
                 ),
                 FeedFilterChip(
-                  label: 'News (${_news.length})',
-                  selected: _filter == _FeedFilter.news,
-                  onSelected: () => setState(() => _filter = _FeedFilter.news),
+                  label: 'News (${state.news.length})',
+                  selected: state.filter == FeedFilter.news,
+                  onSelected: () => notifier.setFilter(FeedFilter.news),
                 ),
               ],
             ),
           ),
-          if (_filter != _FeedFilter.news && _jobs.isNotEmpty)
+          if (state.filter != FeedFilter.news && state.jobs.isNotEmpty)
             TextButton.icon(
-              onPressed: () => setState(() => _seniorityDescending = !_seniorityDescending),
+              onPressed: () => notifier
+                  .setSeniorityDescending(!state.seniorityDescending),
               icon: Icon(
-                _seniorityDescending ? Icons.arrow_downward : Icons.arrow_upward,
+                state.seniorityDescending
+                    ? Icons.arrow_downward
+                    : Icons.arrow_upward,
                 size: 16,
-                color: LedgerColors.brass,
+                color: Theme.of(context).colorScheme.primary,
               ),
-              label: const Text('Seniority', style: TextStyle(fontSize: 12, color: LedgerColors.brass)),
+              label: Text(
+                'Seniority',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
               style: TextButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 minimumSize: const Size(44, 44),
@@ -307,10 +206,12 @@ class DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  List<Widget> _buildFeedItems() {
+  List<Widget> _buildFeedItems(DashboardState state, bool isConnected) {
     final items = <Widget>[];
-    final showAds = _account?.isPremium != true;
-    final sortedJobs = [..._jobs]..sort((a, b) => _seniorityDescending
+    final showAds = state.account?.isPremium != true;
+    final notifier = ref.read(dashboardProvider.notifier);
+
+    final sortedJobs = [...state.jobs]..sort((a, b) => state.seniorityDescending
         ? seniorityRankOf(b.seniority).compareTo(seniorityRankOf(a.seniority))
         : seniorityRankOf(a.seniority).compareTo(seniorityRankOf(b.seniority)));
 
@@ -322,8 +223,9 @@ class DashboardScreenState extends State<DashboardScreen> {
             key: ValueKey(job.url),
             direction: DismissDirection.endToStart,
             background: _dismissBackground(),
-            onDismissed: (_) => _dismissJob(job),
-            child: _withDismissButton(JobCard(job: job), () => _dismissJob(job)),
+            onDismissed: (_) => notifier.dismissJob(job),
+            child: _withDismissButton(
+                JobCard(job: job), () => notifier.dismissJob(job)),
           ),
         );
         if (showAds && (i + 1) % 4 == 0) items.add(const InlineAdCard());
@@ -331,86 +233,98 @@ class DashboardScreenState extends State<DashboardScreen> {
     }
 
     void addNews() {
-      for (var i = 0; i < _news.length; i++) {
-        final item = _news[i];
+      for (var i = 0; i < state.news.length; i++) {
+        final item = state.news[i];
         items.add(
           Dismissible(
             key: ValueKey(item.url),
             direction: DismissDirection.endToStart,
             background: _dismissBackground(),
-            onDismissed: (_) => _dismissNews(item),
-            child: _withDismissButton(NewsCard(news: item), () => _dismissNews(item)),
+            onDismissed: (_) => notifier.dismissNews(item),
+            child: _withDismissButton(
+                NewsCard(news: item), () => notifier.dismissNews(item)),
           ),
         );
         if (showAds && (i + 1) % 4 == 0) items.add(const InlineAdCard());
       }
     }
 
-    switch (_filter) {
-      case _FeedFilter.all:
+    switch (state.filter) {
+      case FeedFilter.all:
         if (sortedJobs.isNotEmpty) {
           items.add(_sectionHeader('JOBS'));
           addJobs();
         }
-        if (_news.isNotEmpty) {
+        if (state.news.isNotEmpty) {
           items.add(_sectionHeader('NEWS'));
           addNews();
         }
-      case _FeedFilter.jobs:
+      case FeedFilter.jobs:
         addJobs();
-      case _FeedFilter.news:
+      case FeedFilter.news:
         addNews();
     }
 
     if (items.isEmpty) {
-      if (_busy) {
+      if (state.busy) {
         items.addAll(const [SkeletonCard(), SkeletonCard(), SkeletonCard()]);
       } else {
-        items.add(_emptyState());
+        items.add(_emptyState(state, isConnected));
       }
     }
     return items;
   }
 
   Widget _sectionHeader(String label) {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8, top: 4),
       child: Text(
         label,
-        style: const TextStyle(color: LedgerColors.brass, fontSize: 11, letterSpacing: 2, fontWeight: FontWeight.bold),
+        style: TextStyle(
+          color: theme.colorScheme.primary,
+          fontSize: 11,
+          letterSpacing: 2,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
 
-  Widget _emptyState() {
-    final connected = ApiClient.instance.isConnected;
-    final neverSearched = _jobs.isEmpty && _news.isEmpty;
+  Widget _emptyState(DashboardState state, bool isConnected) {
+    final theme = Theme.of(context);
+    final neverSearched = state.jobs.isEmpty && state.news.isEmpty;
     final String message;
-    if (!connected) {
+    if (!isConnected) {
       message = 'Connect to your backend in Settings, then search.';
     } else if (neverSearched) {
       message = 'Nothing yet. Search below to check for fresh listings.';
     } else {
-      message = 'No ${_filter == _FeedFilter.jobs ? 'job' : 'news'} results in this search — try a different filter.';
+      message =
+          'No ${state.filter == FeedFilter.jobs ? 'job' : 'news'} results in this search — try a different filter.';
     }
     return Padding(
       padding: const EdgeInsets.only(top: 24),
       child: Text(
         message,
-        style: const TextStyle(color: LedgerColors.slate, fontStyle: FontStyle.italic, fontSize: 12),
+        style: theme.textTheme.bodySmall
+            ?.copyWith(fontSize: 12, fontStyle: FontStyle.italic),
       ),
     );
   }
 
-  Widget _buildSearchBar() {
-    final suggestions = _recentSearches.isNotEmpty
-        ? _recentSearches
-        : (_jobs.isEmpty && _news.isEmpty ? _suggestedQueries : const <String>[]);
+  Widget _buildSearchBar(DashboardState state) {
+    final theme = Theme.of(context);
+    final suggestions = state.recentSearches.isNotEmpty
+        ? state.recentSearches
+        : (state.jobs.isEmpty && state.news.isEmpty
+            ? _suggestedQueries
+            : const <String>[]);
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: LedgerColors.hairline)),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: theme.colorScheme.outline)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -418,8 +332,10 @@ class DashboardScreenState extends State<DashboardScreen> {
         children: [
           if (suggestions.isNotEmpty) ...[
             Text(
-              _recentSearches.isNotEmpty ? 'Recent searches' : 'Try searching for',
-              style: const TextStyle(color: LedgerColors.slate, fontSize: 11, letterSpacing: 1),
+              state.recentSearches.isNotEmpty
+                  ? 'Recent searches'
+                  : 'Try searching for',
+              style: theme.textTheme.labelLarge?.copyWith(letterSpacing: 1),
             ),
             const SizedBox(height: 6),
             SizedBox(
@@ -429,15 +345,18 @@ class DashboardScreenState extends State<DashboardScreen> {
                 itemCount: suggestions.length,
                 separatorBuilder: (_, _) => const SizedBox(width: 8),
                 itemBuilder: (_, i) => ActionChip(
-                  label: Text(suggestions[i], style: const TextStyle(fontSize: 11, color: LedgerColors.parchment)),
-                  backgroundColor: LedgerColors.inkPanel,
-                  side: const BorderSide(color: LedgerColors.hairline),
+                  label: Text(
+                    suggestions[i],
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  backgroundColor: theme.colorScheme.surface,
+                  side: BorderSide(color: theme.colorScheme.outline),
                   visualDensity: VisualDensity.compact,
-                  onPressed: _busy
+                  onPressed: state.busy
                       ? null
                       : () {
                           _searchController.text = suggestions[i];
-                          _runSearch();
+                          _runSearch(suggestions[i]);
                         },
                 ),
               ),
@@ -452,14 +371,14 @@ class DashboardScreenState extends State<DashboardScreen> {
                   width: 44,
                   height: 44,
                   child: ElevatedButton(
-                    onPressed: _busy ? null : _runSearch,
+                    onPressed: state.busy ? null : () => _runSearch(),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: LedgerColors.brass,
-                      foregroundColor: LedgerColors.inkBg,
                       padding: EdgeInsets.zero,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(2)),
                     ),
-                    child: const Icon(Icons.search, size: 20, semanticLabel: 'Search'),
+                    child:
+                        const Icon(Icons.search, size: 20, semanticLabel: 'Search'),
                   ),
                 ),
               ),
@@ -467,28 +386,14 @@ class DashboardScreenState extends State<DashboardScreen> {
               Expanded(
                 child: TextField(
                   controller: _searchController,
-                  enabled: !_busy,
+                  enabled: !state.busy,
                   onSubmitted: (_) => _runSearch(),
                   textInputAction: TextInputAction.search,
-                  style: const TextStyle(color: LedgerColors.parchment, fontSize: 14),
-                  decoration: InputDecoration(
+                  style: const TextStyle(fontSize: 14),
+                  decoration: const InputDecoration(
                     hintText: 'Search for roles, firms, news…',
-                    hintStyle: const TextStyle(color: LedgerColors.slate, fontSize: 13),
-                    filled: true,
-                    fillColor: LedgerColors.inkPanel,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(2),
-                      borderSide: const BorderSide(color: LedgerColors.hairline),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(2),
-                      borderSide: const BorderSide(color: LedgerColors.hairline),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(2),
-                      borderSide: const BorderSide(color: LedgerColors.brass),
-                    ),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   ),
                 ),
               ),
@@ -500,25 +405,20 @@ class DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _dismissBackground() {
+    final theme = Theme.of(context);
     return Container(
       alignment: Alignment.centerRight,
       padding: const EdgeInsets.only(right: 20),
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: LedgerColors.inkPanel,
-        border: Border.all(color: LedgerColors.slate),
+        color: theme.colorScheme.surface,
+        border:
+            Border.all(color: theme.textTheme.bodySmall?.color ?? Colors.grey),
       ),
-      child: const Icon(Icons.close, color: LedgerColors.parchment),
+      child: Icon(Icons.close, color: theme.colorScheme.onSurface),
     );
   }
 
-  /// Overlays an explicit dismiss button on top of a card, on top of the swipe gesture
-  /// Dismissible already provides. Swipe-to-dismiss is a well-known touch convention but
-  /// has no discoverable affordance for a mouse/trackpad user on desktop — this gives
-  /// desktop (and anyone who prefers it on mobile) a visible way to do the same thing.
-  /// Calls the dismiss handler directly rather than routing through Dismissible's own
-  /// drag-completion animation; removing the item from the underlying list is enough for
-  /// Dismissible to unmount cleanly either way.
   Widget _withDismissButton(Widget card, VoidCallback onDismiss) {
     return Stack(
       children: [
@@ -526,9 +426,6 @@ class DashboardScreenState extends State<DashboardScreen> {
         Positioned(
           top: 0,
           right: 0,
-          // 44x44 tap target (the accessibility minimum) even though the visible icon
-          // stays small — the extra hit area extends invisibly over the card's own
-          // corner padding, which is fine since nothing else there is interactive.
           child: Tooltip(
             message: 'Dismiss',
             child: SizedBox(
@@ -537,8 +434,12 @@ class DashboardScreenState extends State<DashboardScreen> {
               child: InkWell(
                 onTap: onDismiss,
                 customBorder: const CircleBorder(),
-                child: const Center(
-                  child: Icon(Icons.close, size: 16, color: LedgerColors.slate),
+                child: Center(
+                  child: Icon(
+                    Icons.close,
+                    size: 16,
+                    color: Theme.of(context).textTheme.bodySmall?.color,
+                  ),
                 ),
               ),
             ),

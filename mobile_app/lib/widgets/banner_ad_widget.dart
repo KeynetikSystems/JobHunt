@@ -42,14 +42,15 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     if (!AdConfig.adsSupported) {
       return Container(
         height: 50,
         alignment: Alignment.center,
-        color: LedgerColors.inkPanel,
-        child: const Text(
+        color: theme.colorScheme.surface,
+        child: Text(
           'Banner ad (Android/iOS only)',
-          style: TextStyle(color: LedgerColors.slate, fontSize: 11),
+          style: TextStyle(color: theme.textTheme.bodySmall?.color, fontSize: 11),
         ),
       );
     }

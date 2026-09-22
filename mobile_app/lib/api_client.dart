@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
+import 'auth_service.dart';
 import 'models/account_status.dart';
 import 'models/history_item.dart';
 import 'models/job_listing.dart';
@@ -16,32 +16,13 @@ class ScanResult {
 /// Talks to the JobHunt backend (backend/app.py). The app never holds Tavily/Groq/SMTP
 /// credentials — only this backend's own API key, obtained via register().
 class ApiClient {
-  /// Pre-fills the Backend URL field so a fresh install doesn't require anyone to know
-  /// or type this — still fully editable in Settings for local dev, staging, or if this
-  /// ever moves (custom domain, different host). Never auto-connects on its own: a
-  /// real api_key only exists after the user enters their email and taps Connect.
-  static const defaultBackendUrl = 'https://api.keynetiksystems.com';
-
-  static const _baseUrlKey = 'backend_base_url';
-  static const _apiKeyKey = 'backend_api_key';
-  static const _emailKey = 'backend_email';
-
   static final ApiClient instance = ApiClient._();
   ApiClient._();
 
-  String? baseUrl;
-  String? apiKey;
-  String? email;
+  bool get isConnected => AuthService.instance.isConnected;
 
-  bool get isConnected =>
-      (baseUrl?.isNotEmpty ?? false) && (apiKey?.isNotEmpty ?? false);
-
-  Future<void> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    baseUrl = prefs.getString(_baseUrlKey) ?? defaultBackendUrl;
-    apiKey = prefs.getString(_apiKeyKey);
-    email = prefs.getString(_emailKey);
-  }
+  String? get baseUrl => AuthService.instance.baseUrl;
+  String? get apiKey => AuthService.instance.apiKey;
 
   /// Registering an email that already belongs to a *verified* account doesn't return
   /// a key here at all — the server emails a fresh one to that address instead of
@@ -67,24 +48,15 @@ class ApiClient {
       );
     }
 
-    this.baseUrl = normalizedUrl;
-    apiKey = key;
-    this.email = email;
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_baseUrlKey, normalizedUrl);
-    await prefs.setString(_apiKeyKey, key);
-    await prefs.setString(_emailKey, email);
+    await AuthService.instance.saveConnection(
+      baseUrl: normalizedUrl,
+      apiKey: key,
+      email: email,
+    );
   }
 
   Future<void> disconnect() async {
-    baseUrl = defaultBackendUrl;
-    apiKey = null;
-    email = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_baseUrlKey);
-    await prefs.remove(_apiKeyKey);
-    await prefs.remove(_emailKey);
+    await AuthService.instance.disconnect();
   }
 
   Map<String, String> get _authHeaders => {

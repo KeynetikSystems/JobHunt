@@ -44,35 +44,40 @@ class _InlineAdCardState extends State<InlineAdCard> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: LedgerColors.inkPanel,
-        border: Border.all(color: LedgerColors.hairline),
+        color: theme.colorScheme.surface,
+        border: Border.all(color: theme.colorScheme.outline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'AD',
-            style: TextStyle(color: LedgerColors.slate, fontSize: 11, letterSpacing: 1),
+            style: TextStyle(
+              color: theme.textTheme.bodySmall?.color,
+              fontSize: 11,
+              letterSpacing: 1,
+            ),
           ),
           const SizedBox(height: 6),
-          Center(child: _buildBody()),
+          Center(child: _buildBody(theme)),
         ],
       ),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(ThemeData theme) {
     if (!AdConfig.adsSupported) {
       return Container(
         height: 250,
         alignment: Alignment.center,
-        child: const Text(
+        child: Text(
           'Inline ad slot (Android/iOS only)',
-          style: TextStyle(color: LedgerColors.slate, fontSize: 11),
+          style: TextStyle(color: theme.textTheme.bodySmall?.color, fontSize: 11),
         ),
       );
     }

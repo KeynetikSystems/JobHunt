@@ -1,7 +1,10 @@
-class NewsItem {
+import 'feed_item.dart';
+
+class NewsItem implements FeedItem {
   final String headline;
   final String source;
   final String summary;
+  @override
   final String url;
 
   const NewsItem({
@@ -11,6 +14,7 @@ class NewsItem {
     required this.url,
   });
 
+  @override
   Map<String, dynamic> toJson() => {
         'headline': headline,
         'source': source,
