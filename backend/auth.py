@@ -6,9 +6,9 @@ have digests emailed to someone who never asked for them.
 
 Keys are stored only as a SHA-256 hash (device_keys.key_hash) — the raw key is shown to
 the caller exactly once, at issuance, and never persisted. A high-entropy token like
-this (192 bits from secrets.token_urlsafe(24)) doesn't need a slow/salted password hash;
-it needs a fast one-way lookup, which SHA-256 provides. This means a database leak alone
-no longer hands out working credentials for every account.
+this (128 bits from secrets.token_hex(16)) doesn't need a slow/salted password hash; it
+needs a fast one-way lookup, which SHA-256 provides. This means a database leak alone no
+longer hands out working credentials for every account.
 
 One row per connected device, not per account — see device_keys in db.py. Registering a
 new device for an already-verified account adds a key rather than replacing the old one,
@@ -23,9 +23,17 @@ import db
 
 
 def generate_api_key() -> str:
-    # Generates a clean, human-friendly 8-character hex key formatted as JH-XXXX-XXXX
-    raw = secrets.token_hex(4).upper()
-    return f"JH-{raw[:4]}-{raw[4:]}"
+    # 128 bits of entropy (secrets.token_hex(16)), grouped into readable 4-char chunks.
+    # This is the entire auth credential — there's no password behind it — so it needs
+    # real cryptographic strength, not just typability. It's delivered by email and meant
+    # to be copy-pasted (see the "Access Key" field's own hint text), not hand-typed
+    # character by character, so length isn't a real UX cost — only an earlier version of
+    # this function (secrets.token_hex(4), 32 bits) traded strength for typability; that
+    # was a real vulnerability (brute-forceable via offline SHA-256, no rate limiting),
+    # fixed here before it reached production (the weak version was never deployed).
+    raw = secrets.token_hex(16).upper()
+    groups = [raw[i:i + 4] for i in range(0, len(raw), 4)]
+    return "JH-" + "-".join(groups)
 
 
 def hash_api_key(key: str) -> str:
