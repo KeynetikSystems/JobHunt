@@ -21,6 +21,14 @@ CREATE TABLE IF NOT EXISTS users (
     email TEXT UNIQUE NOT NULL,
     email_verified INTEGER NOT NULL DEFAULT 0,
     verify_token TEXT,
+    -- Short-lived (see PAIRING_CODE_TTL_SECONDS in backend/app.py), single-use pairing
+    -- code — lets an already-connected device hand a new device access without an email
+    -- round-trip. Unlike device_keys.key_hash (the permanent credential), a short code is
+    -- an acceptable tradeoff here specifically because it expires fast and locks out
+    -- after a few wrong guesses (pairing_code_attempts).
+    pairing_code TEXT,
+    pairing_code_expires_at INTEGER,
+    pairing_code_attempts INTEGER NOT NULL DEFAULT 0,
     -- Personal profile: full_name/phone/location/linkedin_url are reference fields for
     -- the user's own use when filling out application forms elsewhere, not fed into AI
     -- drafting (except full_name, for signing cover letters). work_history/education/
@@ -122,6 +130,9 @@ _USERS_MIGRATIONS = [
     # through here and into device_keys (see _backfill_api_key_hashes() and
     # _migrate_api_key_hash_to_device_keys() below). Left in place afterward, unused.
     ("api_key_hash", "TEXT"),
+    ("pairing_code", "TEXT"),
+    ("pairing_code_expires_at", "INTEGER"),
+    ("pairing_code_attempts", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 

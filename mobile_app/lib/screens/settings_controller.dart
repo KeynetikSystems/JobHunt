@@ -11,6 +11,7 @@ class SettingsController extends ChangeNotifier {
   final urlCtrl = TextEditingController();
   final emailCtrl = TextEditingController();
   final apiKeyCtrl = TextEditingController();
+  final pairingCodeCtrl = TextEditingController();
   final fullNameCtrl = TextEditingController();
   final phoneCtrl = TextEditingController();
   final locationCtrl = TextEditingController();
@@ -69,6 +70,7 @@ class SettingsController extends ChangeNotifier {
     urlCtrl.dispose();
     emailCtrl.dispose();
     apiKeyCtrl.dispose();
+    pairingCodeCtrl.dispose();
     fullNameCtrl.dispose();
     phoneCtrl.dispose();
     locationCtrl.dispose();
@@ -152,11 +154,52 @@ class SettingsController extends ChangeNotifier {
     }
   }
 
+  /// Called on the *new* device with a code shown on an already-connected one —
+  /// no prior connection needed, this is itself how the new device authenticates.
+  Future<String?> connectWithPairingCode() async {
+    _busy = true;
+    notifyListeners();
+    try {
+      await ApiClient.instance.exchangePairingCode(
+        baseUrl: urlCtrl.text.trim(),
+        email: emailCtrl.text.trim(),
+        code: pairingCodeCtrl.text.trim(),
+      );
+      pairingCodeCtrl.clear();
+      await loadProfile();
+      await loadAccount();
+      _busy = false;
+      notifyListeners();
+      return null;
+    } catch (e) {
+      _busy = false;
+      notifyListeners();
+      return friendlyError(e);
+    }
+  }
+
+  /// Called on an already-connected device to generate a code for pairing a new one.
+  Future<(String, int)> requestPairingCode() async {
+    _accountBusy = true;
+    notifyListeners();
+    try {
+      final result = await ApiClient.instance.requestPairingCode();
+      _accountBusy = false;
+      notifyListeners();
+      return result;
+    } catch (e) {
+      _accountBusy = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   Future<void> disconnect() async {
     await ApiClient.instance.disconnect();
     urlCtrl.text = AuthService.instance.baseUrl ?? '';
     emailCtrl.text = '';
     apiKeyCtrl.clear();
+    pairingCodeCtrl.clear();
     _account = null;
     notifyListeners();
   }

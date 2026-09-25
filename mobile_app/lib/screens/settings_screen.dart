@@ -6,11 +6,41 @@ import 'settings_sections/alerts_section.dart';
 import 'settings_sections/backend_section.dart';
 import 'settings_sections/profile_section.dart';
 
-class SettingsScreen extends ConsumerWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends ConsumerState<SettingsScreen> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Picks up e.g. "Email verified: No" -> "Yes" automatically when someone comes back
+    // from clicking the verification link in their email, instead of only refreshing on
+    // an explicit action.
+    if (state == AppLifecycleState.resumed) {
+      final controller = ref.read(settingsControllerProvider);
+      if (controller.account != null) {
+        controller.loadAccount();
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final controller = ref.watch(settingsControllerProvider);
 

@@ -44,7 +44,7 @@ Deployed via Dockerfile + railway.json (Railway). The Dockerfile builds from the
 
 Not yet built: billing (Stripe) — plan upgrades are still a manual review of /api/upgrade-request — and a real scheduler (the shared-scan cache refreshes lazily on request rather than on a cron). Per-user custom queries and AI-assisted application materials are both built (/api/search, /api/materials), each with its own daily cap on the free plan.
 
-Routes: GET /api/health, POST /api/register, GET /api/verify, POST /api/resend-verification, POST /api/scan, POST /api/search, POST /api/send, POST /api/dismiss, GET /api/me, GET /api/history, GET/PUT /api/profile, POST /api/materials, GET/PUT /api/alerts, POST /api/upgrade-request, GET /api/export, DELETE /api/account.
+Routes: GET /api/health, POST /api/register, GET /api/verify, POST /api/resend-verification, POST /api/pairing-code, POST /api/pairing-code/exchange, POST /api/profile/parse-cv, POST /api/scan, POST /api/search, POST /api/send, POST /api/dismiss, GET /api/me, GET /api/history, GET/PUT /api/profile, POST /api/materials, GET/PUT /api/alerts, POST /api/upgrade-request, GET /api/export, DELETE /api/account.
 
 Mobile/desktop app
 

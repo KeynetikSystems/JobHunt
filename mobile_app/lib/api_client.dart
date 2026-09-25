@@ -275,6 +275,42 @@ class ApiClient {
     await disconnect();
   }
 
+  /// Generated on this (already-connected) device, shown in-app — the whole point is to
+  /// skip the email round-trip when adding a second device. Returns (code, expiresInSeconds).
+  Future<(String, int)> requestPairingCode() async {
+    _requireConnected();
+    final res = await http.post(Uri.parse('$baseUrl/api/pairing-code'), headers: _authHeaders);
+    if (res.statusCode != 200) {
+      throw Exception(_errorDetail(res));
+    }
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    return (data['code'] as String, data['expires_in_seconds'] as int);
+  }
+
+  /// Run on the *new* device, with a code shown on an already-connected one — no
+  /// existing connection required, this is itself how the new device authenticates.
+  Future<void> exchangePairingCode({
+    required String baseUrl,
+    required String email,
+    required String code,
+  }) async {
+    final normalizedUrl = baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl;
+    final res = await http.post(
+      Uri.parse('$normalizedUrl/api/pairing-code/exchange'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email, 'code': code}),
+    );
+    if (res.statusCode != 200) {
+      throw Exception(_errorDetail(res));
+    }
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    await AuthService.instance.saveConnection(
+      baseUrl: normalizedUrl,
+      apiKey: data['api_key'] as String,
+      email: email,
+    );
+  }
+
   Future<void> resendVerification() async {
     _requireConnected();
     final res = await http.post(Uri.parse('$baseUrl/api/resend-verification'), headers: _authHeaders);

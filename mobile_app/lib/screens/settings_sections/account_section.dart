@@ -87,7 +87,13 @@ class AccountSection extends StatelessWidget {
             }
           },
         ),
-        const SizedBox(height: 8),
+        if (account.isVerified) ...[
+          OutlinedButton(
+            onPressed: controller.accountBusy ? null : () => _addDevice(context),
+            child: const Text('Add Another Device'),
+          ),
+          const SizedBox(height: 8),
+        ],
         Row(
           children: [
             Expanded(
@@ -121,6 +127,52 @@ class AccountSection extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _addDevice(BuildContext context) async {
+    try {
+      final (code, expiresInSeconds) = await controller.requestPairingCode();
+      if (!context.mounted) return;
+      final minutes = (expiresInSeconds / 60).round();
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Pairing Code'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'On your new device, enter this email and code:',
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              SelectableText(
+                code,
+                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: 4),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Expires in $minutes minutes, and works only once.',
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: code));
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied.')));
+              },
+              child: const Text('Copy'),
+            ),
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Done')),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not generate a code: $e')));
+    }
   }
 
   Future<void> _export(BuildContext context) async {

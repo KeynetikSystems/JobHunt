@@ -46,6 +46,15 @@ def generate_verify_token() -> str:
     return secrets.token_urlsafe(24)
 
 
+def generate_pairing_code() -> str:
+    # Short and typeable on purpose — unlike generate_api_key() above, this is single-use,
+    # expires in minutes, and locked out after a few wrong guesses (see
+    # PAIRING_CODE_TTL_SECONDS / PAIRING_CODE_MAX_ATTEMPTS in backend/app.py), so a small
+    # keyspace is an acceptable tradeoff here specifically — those bounds do the work a
+    # long key would otherwise need to do alone.
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
 def require_user(x_api_key: str = Header(...)) -> dict:
     with db.get_db() as conn:
         row = conn.execute(

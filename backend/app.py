@@ -79,6 +79,12 @@ FREE_MATERIALS_DAILY_CAP = 5
 FREE_SEARCH_DAILY_CAP = 10
 FREE_HISTORY_DAYS = 30
 
+# A short pairing code lets an already-connected device hand a new device access without
+# an email round-trip — see auth.generate_pairing_code() for why a short code is an
+# acceptable tradeoff here specifically (it isn't for the permanent API key).
+PAIRING_CODE_TTL_SECONDS = 600
+PAIRING_CODE_MAX_ATTEMPTS = 5
+
 
 def _usage_count_today(user_id: int, action: str) -> int:
     with db.get_db() as conn:
@@ -177,6 +183,20 @@ class RegisterResponse(BaseModel):
     # typed that email in would be an account-takeover primitive.
     api_key: str | None = None
     recovery_email_sent: bool = False
+
+
+class PairingCodeResponse(BaseModel):
+    code: str
+    expires_in_seconds: int
+
+
+class PairingExchangeRequest(BaseModel):
+    email: EmailStr
+    code: str
+
+
+class PairingExchangeResponse(BaseModel):
+    api_key: str
 
 
 class ScanResponse(BaseModel):
@@ -447,6 +467,59 @@ def resend_verification(request: Request, user: dict = Depends(auth.require_user
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Couldn't send the email: {e}")
     return {"status": "sent"}
+
+
+@app.post("/api/pairing-code", response_model=PairingCodeResponse)
+def create_pairing_code(user: dict = Depends(auth.require_verified_user)):
+    """Generated on an already-connected device, shown in-app (not emailed) — the whole
+    point is to skip the email round-trip when adding a second device. Overwrites any
+    previous unused code for this account, so only one is ever valid at a time."""
+    code = auth.generate_pairing_code()
+    expires_at = int(time.time()) + PAIRING_CODE_TTL_SECONDS
+    with db.get_db() as conn:
+        conn.execute(
+            "UPDATE users SET pairing_code = ?, pairing_code_expires_at = ?, pairing_code_attempts = 0 "
+            "WHERE id = ?",
+            (code, expires_at, user["id"]),
+        )
+    return PairingCodeResponse(code=code, expires_in_seconds=PAIRING_CODE_TTL_SECONDS)
+
+
+@app.post("/api/pairing-code/exchange", response_model=PairingExchangeResponse)
+def exchange_pairing_code(body: PairingExchangeRequest):
+    """No auth dependency — this *is* how a new device authenticates, the same role
+    /api/register plays for a brand-new account. Locks out after PAIRING_CODE_MAX_ATTEMPTS
+    wrong guesses (not just the TTL) since a 6-digit code alone is a genuinely brute-forceable
+    range without that bound."""
+    with db.get_db() as conn:
+        user = conn.execute("SELECT * FROM users WHERE email = ?", (body.email,)).fetchone()
+        if not user or not user["pairing_code"]:
+            raise HTTPException(status_code=400, detail="Invalid or expired pairing code.")
+        if user["pairing_code_attempts"] >= PAIRING_CODE_MAX_ATTEMPTS:
+            raise HTTPException(status_code=429, detail="Too many attempts — request a new pairing code.")
+        if int(time.time()) > (user["pairing_code_expires_at"] or 0):
+            raise HTTPException(status_code=400, detail="Pairing code expired — request a new one.")
+        if body.code.strip() != user["pairing_code"]:
+            conn.execute(
+                "UPDATE users SET pairing_code_attempts = pairing_code_attempts + 1 WHERE id = ?",
+                (user["id"],),
+            )
+            # get_db()'s context manager only commits on a clean exit — raising here
+            # would otherwise silently roll back this increment, defeating the lockout.
+            conn.commit()
+            raise HTTPException(status_code=400, detail="Incorrect pairing code.")
+
+        api_key = auth.generate_api_key()
+        conn.execute(
+            "UPDATE users SET pairing_code = NULL, pairing_code_expires_at = NULL, "
+            "pairing_code_attempts = 0 WHERE id = ?",
+            (user["id"],),
+        )
+        conn.execute(
+            "INSERT INTO device_keys (user_id, key_hash) VALUES (?, ?)",
+            (user["id"], auth.hash_api_key(api_key)),
+        )
+    return PairingExchangeResponse(api_key=api_key)
 
 
 @app.post("/api/scan", response_model=ScanResponse)
