@@ -15,6 +15,10 @@ migrate_working_dir/
 # Local isolated Android SDK home used for build troubleshooting — not project source.
 .android-home/
 
+# Scratch backup files and AI-tool-local metadata — not project source.
+*.bak
+.artifacts/
+
 # IntelliJ related
 *.iml
 *.ipr
