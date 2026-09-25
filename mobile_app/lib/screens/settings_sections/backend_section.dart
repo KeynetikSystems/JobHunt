@@ -39,7 +39,6 @@ class BackendSection extends ConsumerWidget {
         const SizedBox(height: 12),
         TextField(
           controller: controller.apiKeyCtrl,
-          obscureText: true,
           style: const TextStyle(fontSize: 13),
           decoration: const InputDecoration(
             labelText: 'Access Key (Optional)',
