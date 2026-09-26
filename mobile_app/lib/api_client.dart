@@ -331,29 +331,6 @@ class ApiClient {
     }
   }
 
-  /// Returns (slackWebhookUrl, telegramChatId).
-  Future<(String, String)> getAlerts() async {
-    _requireConnected();
-    final res = await http.get(Uri.parse('$baseUrl/api/alerts'), headers: _authHeaders);
-    if (res.statusCode != 200) {
-      throw Exception(_errorDetail(res));
-    }
-    final data = jsonDecode(res.body) as Map<String, dynamic>;
-    return (data['slack_webhook_url'] as String? ?? '', data['telegram_chat_id'] as String? ?? '');
-  }
-
-  Future<void> saveAlerts({required String slackWebhookUrl, required String telegramChatId}) async {
-    _requireConnected();
-    final res = await http.put(
-      Uri.parse('$baseUrl/api/alerts'),
-      headers: _authHeaders,
-      body: jsonEncode({'slack_webhook_url': slackWebhookUrl, 'telegram_chat_id': telegramChatId}),
-    );
-    if (res.statusCode != 200) {
-      throw Exception(_errorDetail(res));
-    }
-  }
-
   String _errorDetail(http.Response res) {
     try {
       final detail = (jsonDecode(res.body) as Map<String, dynamic>)['detail'];

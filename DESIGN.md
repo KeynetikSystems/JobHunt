@@ -61,7 +61,7 @@ treatment, or it reintroduces per-user cost scaling.
 
 ### Hosted keys, not BYO keys
 
-The backend holds one operator-owned set of Tavily/Groq/Resend/Telegram credentials.
+The backend holds one operator-owned set of Tavily/Groq/Resend credentials.
 Clients never see them. This is what makes metering, plan tiers, and per-user caps
 possible at all — a BYO-key client (which the original desktop app used to be) can't be
 metered, because there's no server in the loop to enforce anything.
@@ -114,7 +114,7 @@ drift):
   capped)
 - **Actions**: `POST /api/send` (email + mark seen), `POST /api/dismiss` (mark seen only)
 - **Data**: `GET /api/history`, `GET/PUT /api/profile`, `POST /api/materials`,
-  `GET/PUT /api/alerts` (premium Slack/Telegram)
+  `GET /api/export`, `DELETE /api/account`
 
 Auth is one header (`X-API-Key`), one SQLite lookup (`backend/auth.py`) — no session,
 no OAuth. `require_user` vs `require_verified_user` is the only access-control axis
@@ -170,12 +170,12 @@ per-user state lives in its own table rather than on `users` directly.
   per-client hack.
 - **Legal docs (`PRIVACY.md`/`TERMS.md`) haven't been reviewed** for actual legal
   adequacy by anyone — separate from the engineering checklist entirely.
-- **SSRF via user-supplied Slack webhook URL.** `PUT /api/alerts` accepts any string for
-  `slack_webhook_url` with no validation, and the server POSTs to it directly and
-  repeatedly (every scan refresh) via `alerts.send_slack_alert`. A malicious value
-  pointing at an internal address would have the server make that request on a
-  schedule. Found during a security review; not yet fixed. Small fix: validate
-  `https://` scheme + restrict host to `hooks.slack.com` before storing.
+- ~~SSRF via user-supplied Slack webhook URL~~ — moot after removing the premium
+  push-alert feature entirely (2026-09-26): `PUT /api/alerts` and `alerts.py` (which
+  POSTed to a user-supplied `slack_webhook_url` with no validation) no longer exist,
+  so the vulnerable surface is gone rather than patched. The `slack_webhook_url`/
+  `telegram_chat_id` columns remain on `users` (unused) rather than dropped, matching
+  this project's convention for retired columns.
 - ~~Desktop lacks premium Slack/Telegram alerts config and Privacy/Terms links~~ — moot
   after the QML desktop app's retirement (2026-09-21): the Flutter app's Settings screen,
   which already has both, is now what ships on desktop too.

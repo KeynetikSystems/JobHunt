@@ -46,7 +46,7 @@ class AccountSection extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           const Text(
-            'Unlock Slack/Telegram alerts and unlimited application materials.',
+            'Unlock unlimited searches, unlimited AI drafts, full history, and no ads.',
             style: TextStyle(color: Colors.grey, fontSize: 12),
           ),
           const SizedBox(height: 8),

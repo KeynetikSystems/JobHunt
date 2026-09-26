@@ -20,8 +20,6 @@ class SettingsController extends ChangeNotifier {
   final educationCtrl = TextEditingController();
   final skillsCtrl = TextEditingController();
   final upgradeNoteCtrl = TextEditingController();
-  final slackCtrl = TextEditingController();
-  final telegramCtrl = TextEditingController();
 
   bool _busy = false;
   bool get busy => _busy;
@@ -32,9 +30,6 @@ class SettingsController extends ChangeNotifier {
   bool _accountBusy = false;
   bool get accountBusy => _accountBusy;
 
-  bool _alertsBusy = false;
-  bool get alertsBusy => _alertsBusy;
-
   AccountStatus? _account;
   AccountStatus? get account => _account;
 
@@ -44,7 +39,6 @@ class SettingsController extends ChangeNotifier {
   final Map<String, bool> sectionExpanded = {
     'Backend': true,
     'Personal Profile': false,
-    'Alerts': true,
     'Account': true,
   };
 
@@ -79,8 +73,6 @@ class SettingsController extends ChangeNotifier {
     educationCtrl.dispose();
     skillsCtrl.dispose();
     upgradeNoteCtrl.dispose();
-    slackCtrl.dispose();
-    telegramCtrl.dispose();
     super.dispose();
   }
 
@@ -115,11 +107,6 @@ class SettingsController extends ChangeNotifier {
   Future<void> loadAccount() async {
     try {
       _account = await ApiClient.instance.me();
-      if (_account?.isPremium ?? false) {
-        final (slack, telegram) = await ApiClient.instance.getAlerts();
-        slackCtrl.text = slack;
-        telegramCtrl.text = telegram;
-      }
     } catch (_) {}
     notifyListeners();
   }
@@ -259,24 +246,6 @@ class SettingsController extends ChangeNotifier {
       _profileBusy = false;
       notifyListeners();
       return 'Save failed: ${friendlyError(e)}';
-    }
-  }
-
-  Future<String?> saveAlerts() async {
-    _alertsBusy = true;
-    notifyListeners();
-    try {
-      await ApiClient.instance.saveAlerts(
-        slackWebhookUrl: slackCtrl.text.trim(),
-        telegramChatId: telegramCtrl.text.trim(),
-      );
-      _alertsBusy = false;
-      notifyListeners();
-      return 'Alerts updated.';
-    } catch (e) {
-      _alertsBusy = false;
-      notifyListeners();
-      return 'Failed to save alerts: ${friendlyError(e)}';
     }
   }
 

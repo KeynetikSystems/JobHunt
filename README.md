@@ -44,7 +44,7 @@ Deployed via Dockerfile + railway.json (Railway). The Dockerfile builds from the
 
 Not yet built: billing (Stripe) — plan upgrades are still a manual review of /api/upgrade-request — and a real scheduler (the shared-scan cache refreshes lazily on request rather than on a cron). Per-user custom queries and AI-assisted application materials are both built (/api/search, /api/materials), each with its own daily cap on the free plan.
 
-Routes: GET /api/health, POST /api/register, GET /api/verify, POST /api/resend-verification, POST /api/pairing-code, POST /api/pairing-code/exchange, POST /api/profile/parse-cv, POST /api/scan, POST /api/search, POST /api/send, POST /api/dismiss, GET /api/me, GET /api/history, GET/PUT /api/profile, POST /api/materials, GET/PUT /api/alerts, POST /api/upgrade-request, GET /api/export, DELETE /api/account.
+Routes: GET /api/health, POST /api/register, GET /api/verify, POST /api/resend-verification, POST /api/pairing-code, POST /api/pairing-code/exchange, POST /api/profile/parse-cv, POST /api/scan, POST /api/search, POST /api/send, POST /api/dismiss, GET /api/me, GET /api/history, GET/PUT /api/profile, POST /api/materials, POST /api/upgrade-request, GET /api/export, DELETE /api/account.
 
 Mobile/desktop app
 
@@ -68,7 +68,7 @@ Roadmap notes
 
 Product direction discussed alongside this codebase, for whoever picks this up next:
 
-Free vs. premium split: free = manual scans, shared default query set, capped custom searches/history/AI drafts; premium = scheduled auto-scans pushed via Slack/Telegram, unlimited custom search, unlimited AI-assisted application materials, and full history. AI-assisted application materials (CV highlights/cover letter) and custom search are live on both clients (Flutter, backend), not premium-only — the caps are what actually differ by plan.
+Free vs. premium split: free = capped custom searches/history/AI drafts, ads shown; premium = unlimited custom search, unlimited AI-assisted application materials, full history, and no ads. AI-assisted application materials (CV highlights/cover letter) and custom search are live on both clients (Flutter, backend), not premium-only — the caps are what actually differ by plan. (Premium Slack/Telegram push alerts existed briefly but were removed — they depended on a background scan-and-alert loop that ran on a timer regardless of actual usage, which is exactly what was burning through the Tavily quota; see CHANGELOG.md.)
 
 ~~BYO-key vs. hosted-key tension~~ — resolved: the original desktop app was migrated onto the hosted backend instead of calling digest_engine.py in-process, so it was metered and gated by plan exactly like mobile. What's still genuinely missing is real billing (Stripe/Paddle or platform in-app purchases) to act on that metering — plan upgrades are still a manual review of /api/upgrade-request.
 

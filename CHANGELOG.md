@@ -1,5 +1,42 @@
 # Changelog
 
+## 2026-09-26
+
+### Root-caused an empty-results bug to a Tavily quota outage, removed premium push alerts
+
+- **Diagnosed "app doesn't fetch results."** Traced through Railway's runtime logs to
+  Tavily returning HTTP 432 ("This request exceeds your plan's set usage limit") on
+  every query. Root cause: the shared-scan background thread ran the full 30-query
+  default set every hour, 24/7, regardless of whether anyone was using the app — about
+  21,600 Tavily calls/month from the scanner alone, which burns through a typical
+  free-tier quota fast. `gather_and_filter()`'s per-query try/except (deliberately
+  resilient so one bad query doesn't kill a whole batch) was silently swallowing every
+  failure, so a total Tavily outage looked identical to "genuinely found nothing" —
+  worth knowing about even after this specific cause is fixed.
+- **Removed the premium Slack/Telegram push-alert feature entirely** (`alerts.py`,
+  `GET/PUT /api/alerts`, `_scheduled_scan_loop`/`_run_scan_and_alert_once` in
+  `backend/app.py`, and the corresponding mobile Settings section) rather than just
+  tuning the schedule. It was the only thing requiring a background thread that scanned
+  on a timer independent of actual usage — removing it means the shared-scan cache is
+  now purely lazy, refreshing only when a real request (any user's `/api/scan` or
+  `/api/search`) finds it stale. This also makes the standing SSRF risk in the
+  user-supplied Slack webhook URL moot — the vulnerable code no longer exists, rather
+  than being patched. `slack_webhook_url`/`telegram_chat_id` columns stay on `users`,
+  unused, matching this project's convention for retired columns.
+- **`CACHE_TTL_SECONDS`: 1 hour → 24 hours.** Matches the project's original "Daily
+  Opportunity Digest" cadence; job postings don't meaningfully change hour-to-hour.
+  Combined with removing the scheduled loop, this cuts scanner-driven Tavily usage from
+  ~21,600/month to ~900/month even when the app is used regularly.
+- Premium's value prop is now: unlimited custom search, unlimited AI drafts, full
+  history, no ads — not push alerts.
+
+Verified: syntax-checked, then live against an isolated backend (stubbed Tavily/Groq/
+Resend keys, throwaway DB) — confirmed `/api/alerts` now 404s, confirmed `/api/export`
+no longer returns an `alerts` key, confirmed registration/auth/scan endpoints still work
+normally. `flutter analyze`/`flutter test` clean on the client side (no new issues; two
+fewer than before, since the deleted alerts widget carried a couple of pre-existing
+lint warnings with it).
+
 ## 2026-09-21
 
 ### Desktop retirement, account deletion/export, mobile state-management migration

@@ -42,8 +42,6 @@ below.
   the same thing twice and so the History screen works.
 - **Usage counts** (e.g. how many AI drafts or custom searches you've made
   today), to enforce free-plan limits.
-- **Slack webhook URL / Telegram chat ID**, only if you configure alerts
-  (premium feature).
 - **Device access keys** — each device you connect (phone, another phone,
   desktop) gets its own key tied to your account, so signing in on a new
   device doesn't log out an existing one.
@@ -61,9 +59,8 @@ We do not collect payment information — there is currently no billing
   specifically choose to draft for.
 - To avoid re-showing you things you've already seen.
 - To enforce free-tier usage limits fairly.
-- To send you a one-time email verification link when you register, an access
-  key if you register an already-verified email from a new device, and
-  transactional alerts if you've configured them.
+- To send you a one-time email verification link when you register, and an
+  access key if you register an already-verified email from a new device.
 
 We do not sell your data, and we do not use your profile or search history
 for advertising.
@@ -78,8 +75,6 @@ Running the service requires sending some data to these processors:
   specific job you're applying to.
 - **Resend** (email delivery) — receives your email address to deliver
   verification links, access-key recovery emails, and digests.
-- **Slack / Telegram** — if you configure alerts, receives job/news summaries
-  (not your profile) via the webhook/chat you set up yourself.
 
 We don't control these third parties' own data practices; see their
 respective privacy policies.

@@ -42,6 +42,9 @@ CREATE TABLE IF NOT EXISTS users (
     education TEXT NOT NULL DEFAULT '',
     skills TEXT NOT NULL DEFAULT '',
     plan TEXT NOT NULL DEFAULT 'free',
+    -- Unused since the premium push-alert feature was removed (no code reads or writes
+    -- these anymore) — left in place rather than dropped, matching this file's existing
+    -- convention for retired columns (cv_text, api_key_hash below).
     slack_webhook_url TEXT NOT NULL DEFAULT '',
     telegram_chat_id TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))

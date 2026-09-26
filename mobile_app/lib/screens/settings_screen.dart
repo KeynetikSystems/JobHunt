@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/settings_provider.dart';
 import 'settings_sections/account_section.dart';
-import 'settings_sections/alerts_section.dart';
 import 'settings_sections/backend_section.dart';
 import 'settings_sections/profile_section.dart';
 
@@ -82,12 +81,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with WidgetsBin
                     controller,
                     'Personal Profile',
                     ProfileSection(controller: controller),
-                  ),
-                  _section(
-                    context,
-                    controller,
-                    'Alerts',
-                    AlertsSection(controller: controller),
                   ),
                   _section(
                     context,

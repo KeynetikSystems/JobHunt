@@ -57,8 +57,7 @@ any change that affects them.
 ## 6. Third-party content
 
 Job listings and news items link to external websites we don't control and
-aren't responsible for. Alerts sent via Slack or Telegram go through
-infrastructure you configure yourself.
+aren't responsible for.
 
 ## 7. Termination
 

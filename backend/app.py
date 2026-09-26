@@ -10,10 +10,11 @@ dedup/send step, not at the search step — each user has their own seen-items l
 sees an item as "new" (and only gets it marked seen) once they've actually had it emailed to
 them, mirroring the desktop app's own dry-run-doesn't-mark-seen behavior.
 
-A background thread proactively refreshes the shared scan cache every CACHE_TTL_SECONDS
-(instead of only refreshing lazily on the next request) and, on each refresh, delivers
-new items to premium users who've configured a Slack webhook or Telegram chat ID —
-free-plan users still only see new items when they open the app and pull /api/scan.
+The shared scan cache refreshes purely lazily — only the first request after it goes stale
+(any user's /api/scan or /api/search) pays the Tavily/Groq cost of a real scan; every request
+in between reads the cache for free. No background thread scans on a timer regardless of
+whether anyone's using the app — that was removed (see CHANGELOG.md) once we no longer had a
+push-alert feature that depended on one.
 
 Deliberately NOT in this first pass: billing (Stripe/Paddle) — plan upgrades are either
 flipped manually in the database or requested via /api/upgrade-request and reviewed by
@@ -42,7 +43,6 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import HTMLResponse  # noqa: E402
 from pydantic import BaseModel, EmailStr  # noqa: E402
 
-import alerts  # noqa: E402
 import auth  # noqa: E402
 import db  # noqa: E402
 
@@ -69,7 +69,7 @@ app.add_middleware(
 # flat as the user count grows, not a rate limiter bolted on separately.
 _cache_lock = threading.Lock()
 _cache = {"jobs": [], "news": [], "fetched_at": 0.0}
-CACHE_TTL_SECONDS = 3600
+CACHE_TTL_SECONDS = 86400  # 24h — was 1h, which burned through Tavily's plan quota fast
 
 # -- free-plan usage caps ---------------------------------------------------
 # No billing yet — a user's plan is flipped manually in the database once they've
@@ -118,55 +118,13 @@ def _get_shared_results() -> tuple[list, list]:
 
 
 def _new_items_for_user(user_id: int, jobs: list, news: list) -> tuple[list, list]:
-    """Filters the shared scan results down to what this specific user hasn't
-    seen yet — shared by /api/scan (pull) and the scheduled alert job (push)."""
+    """Filters the shared scan results down to what this specific user hasn't seen yet."""
     with db.get_db() as conn:
         seen_rows = conn.execute("SELECT url FROM seen_items WHERE user_id = ?", (user_id,)).fetchall()
     seen_urls = {row["url"] for row in seen_rows}
     new_jobs = [j for j in jobs if j.get("url") not in seen_urls]
     new_news = [n for n in news if n.get("url") not in seen_urls]
     return new_jobs, new_news
-
-
-# -- scheduled scan + premium alerts -----------------------------------------
-# Runs in a background thread so premium users get pushed new items automatically
-# instead of having to open the app and pull /api/scan themselves ("real-time"
-# vs. free's "manual"). A failed alert for one user is logged and skipped, never
-# allowed to break the loop for everyone else.
-
-def _run_scan_and_alert_once() -> None:
-    jobs, news = _get_shared_results()
-    env = digest_engine.load_env()
-    bot_token = env.get("TELEGRAM_BOT_TOKEN", "")
-    with db.get_db() as conn:
-        premium_users = conn.execute("SELECT * FROM users WHERE plan = 'premium'").fetchall()
-    for row in premium_users:
-        user = dict(row)
-        if not user["slack_webhook_url"] and not user["telegram_chat_id"]:
-            continue
-        new_jobs, new_news = _new_items_for_user(user["id"], jobs, news)
-        if not new_jobs and not new_news:
-            continue
-        try:
-            if user["slack_webhook_url"]:
-                alerts.send_slack_alert(user["slack_webhook_url"], new_jobs, new_news)
-            if user["telegram_chat_id"]:
-                alerts.send_telegram_alert(bot_token, user["telegram_chat_id"], new_jobs, new_news)
-            _mark_seen(user["id"], new_jobs, new_news)
-        except Exception as e:
-            print(f"Alert delivery failed for user {user['id']}: {e}")
-
-
-def _scheduled_scan_loop() -> None:
-    while True:
-        time.sleep(CACHE_TTL_SECONDS)
-        try:
-            _run_scan_and_alert_once()
-        except Exception as e:
-            print(f"Scheduled scan failed: {e}")
-
-
-threading.Thread(target=_scheduled_scan_loop, daemon=True).start()
 
 
 # -- schemas ----------------------------------------------------------------
@@ -270,16 +228,6 @@ class MeResponse(BaseModel):
     plan: str
     materials_used_today: int
     materials_daily_cap: int | None  # null = unlimited (premium)
-
-
-class AlertsRequest(BaseModel):
-    slack_webhook_url: str = ""
-    telegram_chat_id: str = ""
-
-
-class AlertsResponse(BaseModel):
-    slack_webhook_url: str
-    telegram_chat_id: str
 
 
 class UpgradeRequestBody(BaseModel):
@@ -627,10 +575,6 @@ def export_account(user: dict = Depends(auth.require_user)):
         "plan": user["plan"],
         "created_at": user["created_at"],
         "profile": _profile_of(user),
-        "alerts": {
-            "slack_webhook_url": user["slack_webhook_url"],
-            "telegram_chat_id": user["telegram_chat_id"],
-        },
         "connected_devices": device_count,
         "history": [dict(row) for row in history_rows],
     }
@@ -781,28 +725,6 @@ def materials(body: MaterialsRequest, user: dict = Depends(auth.require_verified
         raise HTTPException(status_code=500, detail=str(e))
     _log_usage(user["id"], "materials")
     return MaterialsResponse(**result)
-
-
-@app.get("/api/alerts", response_model=AlertsResponse)
-def get_alerts(user: dict = Depends(auth.require_verified_user)):
-    return AlertsResponse(slack_webhook_url=user["slack_webhook_url"], telegram_chat_id=user["telegram_chat_id"])
-
-
-@app.put("/api/alerts", response_model=AlertsResponse)
-def put_alerts(body: AlertsRequest, user: dict = Depends(auth.require_verified_user)):
-    """Configures where scheduled-scan alerts get pushed. Premium only — free-plan
-    users still get new items, just by pulling /api/scan themselves."""
-    if user["plan"] != "premium":
-        raise HTTPException(
-            status_code=403,
-            detail="Multi-channel alerts are a premium feature. Request an upgrade via /api/upgrade-request.",
-        )
-    with db.get_db() as conn:
-        conn.execute(
-            "UPDATE users SET slack_webhook_url = ?, telegram_chat_id = ? WHERE id = ?",
-            (body.slack_webhook_url, body.telegram_chat_id, user["id"]),
-        )
-    return AlertsResponse(slack_webhook_url=body.slack_webhook_url, telegram_chat_id=body.telegram_chat_id)
 
 
 @app.post("/api/upgrade-request", response_model=UpgradeRequestResponse)

@@ -4,7 +4,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 /// finds new items. Doesn't need Firebase/a push service, but also can't fire
 /// while the app is closed; that's the tradeoff for zero external setup. See
 /// the roadmap doc for the real push-notification path (FCM) if this isn't
-/// enough once premium alerts (Slack/Telegram) are validated.
+/// enough someday.
 class NotificationService {
   static final NotificationService instance = NotificationService._();
   NotificationService._();
